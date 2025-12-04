@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EducaMunicípio - Matrícula Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Polyfill process.env for browser environments -->
+    <script>
+      window.process = window.process || { env: { API_KEY: '' } };
+    </script>
+
+    <!-- Leaflet CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Leaflet Heat -->
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js" crossorigin=""></script>
+
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+      }
+      /* Custom Scrollbar for Chat */
+      .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+      }
+      .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+      }
+
+      /* Print Styles */
+      @media print {
+        nav, footer, .no-print, .chat-widget {
+          display: none !important;
+        }
+        body {
+          background-color: white !important;
+          color: black !important;
+        }
+        .print-container {
+          box-shadow: none !important;
+          border: 1px solid #ccc !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 20px !important;
+        }
+        .print-only {
+          display: block !important;
+        }
+        /* Ensure background colors (like badges) print */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+      }
+      .print-only {
+        display: none;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.1/",
+    "react": "https://aistudiocdn.com/react@^19.2.1",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.1/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.10.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+  </body>
+</html>

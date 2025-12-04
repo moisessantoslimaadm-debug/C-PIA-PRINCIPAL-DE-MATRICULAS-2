@@ -1,0 +1,7 @@
+{
+  "name": "CÓPIA PRINCIPAL DE MATRICULAS 2",
+  "description": "Plataforma oficial para gestão de matrículas da rede municipal de ensino, com assistente virtual integrado.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
