@@ -226,12 +226,20 @@ export const SchoolList: React.FC = () => {
 
   const filteredSchoolStudents = useMemo(() => {
     return schoolStudents.filter(s => {
-      // Text Search
       const term = studentSearchTerm.toLowerCase();
+      const termClean = term.replace(/\D/g, ''); // Extract just numbers for CPF search
+
+      // 1. Text Search (Name & Enrollment ID)
       const matchesText = !term || 
         s.name.toLowerCase().includes(term) || 
-        s.cpf.includes(term) ||
-        s.enrollmentId?.includes(term);
+        (s.enrollmentId && s.enrollmentId.toLowerCase().includes(term));
+
+      // 2. CPF Search (Robust - ignores formatting)
+      const studentCpfClean = s.cpf ? s.cpf.replace(/\D/g, '') : '';
+      const matchesCpf = termClean.length > 0 && studentCpfClean.includes(termClean);
+
+      // Combine matches
+      const matchesSearch = matchesText || matchesCpf;
 
       // Status Filter
       const matchesStatus = modalStatusFilter === 'Todos' || s.status === modalStatusFilter;
@@ -239,7 +247,7 @@ export const SchoolList: React.FC = () => {
       // Class Filter
       const matchesClass = modalClassFilter === 'Todas' || s.className === modalClassFilter;
 
-      return matchesText && matchesStatus && matchesClass;
+      return matchesSearch && matchesStatus && matchesClass;
     });
   }, [schoolStudents, studentSearchTerm, modalStatusFilter, modalClassFilter]);
 

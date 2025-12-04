@@ -62,26 +62,41 @@ export const Status: React.FC = () => {
     if (!studentInput.trim()) return;
 
     const term = studentInput.trim();
-    const normalizedTerm = normalizeString(term);
     const cleanCpfTerm = term.replace(/\D/g, '');
+    
+    // Check if the search term looks like a CPF/ID (numbers, dots, dashes only)
+    const isNumericQuery = /^[\d.-]+$/.test(term);
 
     const found = students.filter(s => {
-      // Name Search (Normalized & Robust)
-      // Removes special chars to ensure "D'Ávila" matches "davila"
-      const studentNameNorm = normalizeString(s.name);
-      const matchesName = studentNameNorm.includes(normalizedTerm);
+      if (isNumericQuery) {
+          // --- Numeric Query Mode (Prioritize CPF/ID) ---
+          
+          // 1. CPF Search
+          const studentCpfClean = s.cpf ? s.cpf.replace(/\D/g, '') : '';
+          // Match if term has at least 3 digits and is part of the student CPF
+          const matchesCpf = cleanCpfTerm.length >= 3 && studentCpfClean.includes(cleanCpfTerm);
 
-      // CPF Search (Clean numbers)
-      const studentCpfClean = s.cpf ? s.cpf.replace(/\D/g, '') : '';
-      // Only match CPF if the term looks like a CPF (has digits) and matches
-      // Allowing partial match for CPF if at least 3 digits to avoid noise
-      const matchesCpf = cleanCpfTerm.length >= 3 && studentCpfClean.includes(cleanCpfTerm);
+          // 2. ID Match
+          const matchesId = s.id.includes(term);
 
-      // Protocol/ID Search
-      const matchesProtocol = s.enrollmentId && s.enrollmentId.toLowerCase().includes(term.toLowerCase());
-      const matchesId = s.id === term;
+          // 3. Protocol Match (Partial numeric match)
+          const matchesProtocol = s.enrollmentId && s.enrollmentId.includes(term);
 
-      return matchesName || matchesCpf || matchesProtocol || matchesId;
+          return matchesCpf || matchesId || matchesProtocol;
+      } else {
+          // --- Text Query Mode (Name, Alphanumeric Protocol) ---
+          
+          const normalizedTerm = normalizeString(term);
+          
+          // 1. Name Search
+          const studentNameNorm = normalizeString(s.name);
+          const matchesName = studentNameNorm.includes(normalizedTerm);
+
+          // 2. Protocol Search (Case insensitive)
+          const matchesProtocol = s.enrollmentId && s.enrollmentId.toLowerCase().includes(term.toLowerCase());
+          
+          return matchesName || matchesProtocol;
+      }
     });
 
     setSearchResults(found);
