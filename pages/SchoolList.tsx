@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { MapPin, Star, Users, Search, Map as MapIcon, List, X, Calendar, Hash, School as SchoolIcon, Layout, ArrowUpDown, PieChart, Baby, BookOpen, GraduationCap, Library, AlertCircle, Loader2 } from 'lucide-react';
@@ -25,19 +26,30 @@ const SchoolMap: React.FC<SchoolMapProps> = ({ schools, center, onSelectSchool }
         if (!mapContainerRef.current) return;
         if (typeof L === 'undefined') return;
 
-        // Create Map Instance
-        const map = L.map(mapContainerRef.current).setView([center.lat, center.lng], 13);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // Ensure container has dimensions
+        const { clientWidth, clientHeight } = mapContainerRef.current;
+        if (clientWidth === 0 || clientHeight === 0) return;
 
-        // Create a LayerGroup for markers (Efficient update)
-        const markersLayer = L.layerGroup().addTo(map);
-        
-        mapInstanceRef.current = map;
-        markersLayerRef.current = markersLayer;
-        setIsMapReady(true);
+        // Create Map Instance
+        if (!mapInstanceRef.current) {
+            const map = L.map(mapContainerRef.current).setView([center.lat, center.lng], 13);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Create a LayerGroup for markers (Efficient update)
+            const markersLayer = L.layerGroup().addTo(map);
+            
+            mapInstanceRef.current = map;
+            markersLayerRef.current = markersLayer;
+            
+            // Force sizing update
+            setTimeout(() => {
+                map.invalidateSize();
+                setIsMapReady(true);
+            }, 100);
+        }
 
         // Cleanup on unmount (Switching back to List View)
         return () => {

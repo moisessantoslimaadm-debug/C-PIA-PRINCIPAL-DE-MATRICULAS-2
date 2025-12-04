@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useData } from '../contexts/DataContext';
 import { Link } from '../router';
@@ -192,10 +193,16 @@ const StudentDensityMap: React.FC = () => {
     const mapRef = useRef<any>(null);
     const heatLayerRef = useRef<any>(null);
     const [viewType, setViewType] = useState<'all' | 'pending'>('all');
+    const [isMapReady, setIsMapReady] = useState(false);
 
+    // Initialize Map only after container is mounted and has dimensions
     useEffect(() => {
         if (!mapContainerRef.current) return;
         if (typeof L === 'undefined') return;
+
+        // Ensure container has dimensions before initializing
+        const { clientWidth, clientHeight } = mapContainerRef.current;
+        if (clientWidth === 0 || clientHeight === 0) return;
 
         // Initialize Map
         if (!mapRef.current) {
@@ -204,6 +211,24 @@ const StudentDensityMap: React.FC = () => {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(map);
             mapRef.current = map;
+            
+            // Force update size after a tick to ensure correct rendering context
+            setTimeout(() => {
+                map.invalidateSize();
+                setIsMapReady(true);
+            }, 100);
+        }
+    }, []);
+
+    // Handle Heatmap Layer updates
+    useEffect(() => {
+        if (!isMapReady || !mapRef.current) return;
+        if (typeof L === 'undefined') return;
+
+        // Safety check: Canvas drawing fails if container is 0x0
+        if (mapContainerRef.current) {
+             const { clientWidth, clientHeight } = mapContainerRef.current;
+             if (clientWidth === 0 || clientHeight === 0) return;
         }
 
         // Generate Heat Points
@@ -239,21 +264,26 @@ const StudentDensityMap: React.FC = () => {
         // Remove existing heat layer
         if (heatLayerRef.current) {
             mapRef.current.removeLayer(heatLayerRef.current);
+            heatLayerRef.current = null;
         }
 
         // Add new heat layer
         if (typeof L.heatLayer === 'function' && points.length > 0) {
-            heatLayerRef.current = L.heatLayer(points, {
-                radius: 25,
-                blur: 15,
-                maxZoom: 17,
-                gradient: viewType === 'all' 
-                    ? {0.4: 'blue', 0.65: 'lime', 1: 'red'}
-                    : {0.4: 'yellow', 0.65: 'orange', 1: 'red'}
-            }).addTo(mapRef.current);
+            try {
+                heatLayerRef.current = L.heatLayer(points, {
+                    radius: 25,
+                    blur: 15,
+                    maxZoom: 17,
+                    gradient: viewType === 'all' 
+                        ? {0.4: 'blue', 0.65: 'lime', 1: 'red'}
+                        : {0.4: 'yellow', 0.65: 'orange', 1: 'red'}
+                }).addTo(mapRef.current);
+            } catch (error) {
+                console.error("Error drawing heatmap:", error);
+            }
         }
 
-    }, [students, schools, viewType]);
+    }, [students, schools, viewType, isMapReady]);
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
