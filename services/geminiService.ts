@@ -25,7 +25,10 @@ let ai: GoogleGenAI | null = null;
 
 const getAiClient = () => {
   if (!ai) {
-    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    // Tenta pegar a chave do Vite (VITE_API_KEY) ou fallback para process.env
+    // @ts-ignore
+    const apiKey = import.meta.env?.VITE_API_KEY || process.env.API_KEY || '';
+    ai = new GoogleGenAI({ apiKey });
   }
   return ai;
 }

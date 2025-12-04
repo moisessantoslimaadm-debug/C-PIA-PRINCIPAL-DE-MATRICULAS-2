@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { INITIAL_REGISTRATION_STATE } from '../constants';
 import { useData } from '../contexts/DataContext';
@@ -438,6 +439,13 @@ export const Registration: React.FC = () => {
     }
 
     if (formState.step === 3) {
+      // Validate Mandatory Address Fields
+      const { zipCode, street, number, neighborhood } = formState.address;
+      if (!zipCode?.trim() || !street?.trim() || !number?.trim() || !neighborhood?.trim()) {
+          addToast('Por favor, preencha todos os campos obrigatórios do endereço (CEP, Rua, Número e Bairro).', 'warning');
+          return;
+      }
+
       if (!formState.address.lat || !formState.address.lng) {
           // If no coordinate selected, use default city center but warn
           const defaultLat = -12.5260;
