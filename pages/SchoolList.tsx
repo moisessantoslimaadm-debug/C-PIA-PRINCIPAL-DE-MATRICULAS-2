@@ -1,10 +1,11 @@
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useData } from '../contexts/DataContext';
-import { MapPin, Star, Users, Search, Map as MapIcon, List, X, Calendar, Hash, School as SchoolIcon, Layout, ArrowUpDown, PieChart, Baby, BookOpen, GraduationCap, Library, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Star, Users, Search, Map as MapIcon, List, X, Calendar, Hash, School as SchoolIcon, Layout, ArrowUpDown, PieChart, Baby, BookOpen, GraduationCap, Library, AlertCircle, Loader2, CreditCard } from 'lucide-react';
 import { SchoolType, School, RegistryStudent } from '../types';
+import { loadLeaflet } from '../services/leafletLoader';
 
-// Declare Leaflet globally since we import it in index.html
+// Declare Leaflet globally
 declare const L: any;
 
 // --- Subcomponent: SchoolMap ---
@@ -15,44 +16,73 @@ interface SchoolMapProps {
     onSelectSchool: (school: School) => void;
 }
 
-const SchoolMap: React.FC<SchoolMapProps> = ({ schools, center, onSelectSchool }) => {
+// Optimized with React.memo to prevent unnecessary re-renders
+const SchoolMap: React.FC<SchoolMapProps> = React.memo(({ schools, center, onSelectSchool }) => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapInstanceRef = useRef<any>(null);
     const markersLayerRef = useRef<any>(null); // Optimization: Use LayerGroup
     const [isMapReady, setIsMapReady] = useState(false);
+    const [isLoadingLib, setIsLoadingLib] = useState(true);
 
     // 1. Initialize Map Structure (Run Once)
     useEffect(() => {
         if (!mapContainerRef.current) return;
-        if (typeof L === 'undefined') return;
 
-        // Ensure container has dimensions
-        const { clientWidth, clientHeight } = mapContainerRef.current;
-        if (clientWidth === 0 || clientHeight === 0) return;
+        let isMounted = true;
 
-        // Create Map Instance
-        if (!mapInstanceRef.current) {
-            const map = L.map(mapContainerRef.current).setView([center.lat, center.lng], 13);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+        const initMap = async () => {
+            try {
+                await loadLeaflet();
+                if (!isMounted) return;
+                setIsLoadingLib(false);
 
-            // Create a LayerGroup for markers (Efficient update)
-            const markersLayer = L.layerGroup().addTo(map);
-            
-            mapInstanceRef.current = map;
-            markersLayerRef.current = markersLayer;
-            
-            // Force sizing update
-            setTimeout(() => {
-                map.invalidateSize();
-                setIsMapReady(true);
-            }, 100);
-        }
+                if (typeof L === 'undefined') return;
 
-        // Cleanup on unmount (Switching back to List View)
+                // Ensure container has dimensions
+                const { clientWidth, clientHeight } = mapContainerRef.current!;
+                if (clientWidth === 0 || clientHeight === 0) return;
+
+                // Create Map Instance if not exists
+                if (!mapInstanceRef.current) {
+                    const map = L.map(mapContainerRef.current!).setView([center.lat, center.lng], 13);
+                    
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    }).addTo(map);
+
+                    // Create a LayerGroup for markers (Efficient update)
+                    const markersLayer = L.layerGroup().addTo(map);
+                    
+                    mapInstanceRef.current = map;
+                    markersLayerRef.current = markersLayer;
+                    
+                    // Force sizing update
+                    requestAnimationFrame(() => {
+                        map.invalidateSize();
+                        setIsMapReady(true);
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load map library", error);
+            }
+        };
+
+        // ResizeObserver to handle layout changes
+        const resizeObserver = new ResizeObserver(() => {
+            if (mapInstanceRef.current) {
+                requestAnimationFrame(() => {
+                    mapInstanceRef.current?.invalidateSize();
+                });
+            }
+        });
+        resizeObserver.observe(mapContainerRef.current);
+
+        initMap();
+
+        // Cleanup on unmount
         return () => {
+            isMounted = false;
+            resizeObserver.disconnect();
             if (mapInstanceRef.current) {
                 mapInstanceRef.current.remove();
                 mapInstanceRef.current = null;
@@ -125,10 +155,10 @@ const SchoolMap: React.FC<SchoolMapProps> = ({ schools, center, onSelectSchool }
 
     return (
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden h-[600px] relative animate-in fade-in duration-500">
-             {!isMapReady && (
+             {(isLoadingLib || !isMapReady) && (
                  <div className="absolute inset-0 flex items-center justify-center bg-slate-50 z-20">
                      <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-                     <span className="ml-2 text-slate-500 font-medium">Carregando mapa...</span>
+                     <span className="ml-2 text-slate-500 font-medium">{isLoadingLib ? 'Baixando recursos do mapa...' : 'Renderizando mapa...'}</span>
                  </div>
              )}
              <div ref={mapContainerRef} className="w-full h-full z-10" />
@@ -142,7 +172,7 @@ const SchoolMap: React.FC<SchoolMapProps> = ({ schools, center, onSelectSchool }
              </div>
         </div>
     );
-};
+});
 
 
 // --- Main Component ---
@@ -160,6 +190,7 @@ export const SchoolList: React.FC = () => {
   
   // Modal Filters
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [studentSearchCpf, setStudentSearchCpf] = useState(''); // Specific CPF filter
   const [modalStatusFilter, setModalStatusFilter] = useState<string>('Todos');
   const [modalClassFilter, setModalClassFilter] = useState<string>('Todas');
 
@@ -246,12 +277,16 @@ export const SchoolList: React.FC = () => {
         s.name.toLowerCase().includes(term) || 
         (s.enrollmentId && s.enrollmentId.toLowerCase().includes(term));
 
-      // 2. CPF Search (Robust - ignores formatting)
+      // 2. CPF Search (Robust - ignores formatting if searching in main bar)
       const studentCpfClean = s.cpf ? s.cpf.replace(/\D/g, '') : '';
       const matchesCpf = termClean.length > 0 && studentCpfClean.includes(termClean);
 
       // Combine matches
       const matchesSearch = matchesText || matchesCpf;
+
+      // 3. Specific CPF Filter (New)
+      const specificCpfTerm = studentSearchCpf.replace(/\D/g, '');
+      const matchesSpecificCpf = !specificCpfTerm || (s.cpf && s.cpf.replace(/\D/g, '').includes(specificCpfTerm));
 
       // Status Filter
       const matchesStatus = modalStatusFilter === 'Todos' || s.status === modalStatusFilter;
@@ -259,9 +294,9 @@ export const SchoolList: React.FC = () => {
       // Class Filter
       const matchesClass = modalClassFilter === 'Todas' || s.className === modalClassFilter;
 
-      return matchesSearch && matchesStatus && matchesClass;
+      return matchesSearch && matchesSpecificCpf && matchesStatus && matchesClass;
     });
-  }, [schoolStudents, studentSearchTerm, modalStatusFilter, modalClassFilter]);
+  }, [schoolStudents, studentSearchTerm, studentSearchCpf, modalStatusFilter, modalClassFilter]);
 
   // Group students by Class (Turma) for Classes Tab
   const schoolClassesGrouped = useMemo(() => {
@@ -287,11 +322,13 @@ export const SchoolList: React.FC = () => {
      return Math.max(...sortedClassEntries.map(([, students]) => students.length));
   }, [sortedClassEntries]);
 
-  const handleSchoolSelect = (school: School) => {
+  // Stabilize the handler function to allow proper memoization of child components
+  const handleSchoolSelect = useCallback((school: School) => {
     setSelectedSchool(school);
     setModalActiveTab('students');
     setStudentSearchTerm('');
-  };
+    setStudentSearchCpf('');
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 md:py-12 relative">
@@ -627,6 +664,16 @@ export const SchoolList: React.FC = () => {
                                         onChange={(e) => setStudentSearchTerm(e.target.value)}
                                     />
                                 </div>
+                                <div className="relative w-full sm:w-48">
+                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Filtrar por CPF" 
+                                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={studentSearchCpf}
+                                        onChange={(e) => setStudentSearchCpf(e.target.value)}
+                                    />
+                                </div>
                                 
                                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                                     <select 
@@ -670,6 +717,12 @@ export const SchoolList: React.FC = () => {
                                                         <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
                                                             {student.enrollmentId && (
                                                                 <span className="flex items-center gap-1 bg-slate-100 px-1.5 rounded"><Hash className="h-3 w-3" /> {student.enrollmentId}</span>
+                                                            )}
+                                                            {student.cpf && (
+                                                                <span className="flex items-center gap-1 font-mono text-[10px] bg-slate-100 px-1.5 rounded border border-slate-200" title="CPF">
+                                                                    <CreditCard className="h-2.5 w-2.5" /> 
+                                                                    {student.cpf}
+                                                                </span>
                                                             )}
                                                             <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {student.birthDate}</span>
                                                             {student.className && (

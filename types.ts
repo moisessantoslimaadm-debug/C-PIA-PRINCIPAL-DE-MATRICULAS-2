@@ -64,6 +64,12 @@ export interface ChatMessage {
   isLoading?: boolean;
 }
 
+export interface StudentHistory {
+  date: string;
+  action: string;
+  user: string;
+}
+
 // Updated interface for data extracted from PDF
 export interface RegistryStudent {
   id: string; // ID único do aluno
@@ -82,4 +88,5 @@ export interface RegistryStudent {
   specialNeeds?: boolean; // Atendimento AEE
   lat?: number; // Latitude exata da residência
   lng?: number; // Longitude exata da residência
+  history?: StudentHistory[]; // Log de alterações
 }

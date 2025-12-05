@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData } from '../contexts/DataContext';
 import { useToast } from '../contexts/ToastContext';
@@ -7,9 +6,10 @@ import {
   Download, Users, Search, ChevronLeft, ChevronRight, Eye, Save, UserPlus, X, Eraser,
   School as SchoolIcon, Layout, Bus, HeartPulse,
   ArrowUpDown, ArrowUp, ArrowDown, Layers, Trash2, Lock, Edit3, CheckSquare, Square, MinusSquare, LogOut,
-  Pencil
+  Pencil, MapPin, History, Clock, ChevronDown, ChevronUp, PlusCircle
 } from 'lucide-react';
-import { RegistryStudent, School, SchoolType } from '../types';
+import { RegistryStudent, School, SchoolType, StudentHistory } from '../types';
+import { Link } from '../router';
 
 // Helper functions defined outside component
 const normalizeKey = (key: string) => {
@@ -189,23 +189,111 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
   );
 };
 
+// Import Confirmation Modal
+const ImportModal = ({ isOpen, onClose, onConfirm, dataLength, type, schoolName }: any) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full relative p-6 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-3 mb-4 text-slate-800">
+                    <div className="bg-green-100 p-3 rounded-full text-green-600">
+                        <FileSpreadsheet className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-lg font-bold">Arquivo Processado!</h3>
+                        <p className="text-xs text-slate-500">Os dados estão prontos para importação.</p>
+                    </div>
+                </div>
+                
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mb-6 space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                        <span className="text-sm text-slate-600">Tipo de Dados:</span>
+                        <span className="font-bold text-slate-800">
+                            {type === 'schools' ? 'Escolas' : type === 'educacenso' ? 'Censo Escolar Completo' : 'Alunos'}
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                        <span className="text-sm text-slate-600">Registros Encontrados:</span>
+                        <span className="font-bold text-blue-600 text-lg">{dataLength}</span>
+                    </div>
+                    {schoolName && (
+                        <div className="flex flex-col gap-1">
+                            <span className="text-sm text-slate-600">Escola Vinculada:</span>
+                            <span className="font-bold text-slate-800 text-sm bg-white p-2 rounded border border-slate-200 truncate">
+                                <SchoolIcon className="h-3 w-3 inline mr-1 text-indigo-500" />
+                                {schoolName}
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                <p className="text-slate-600 text-sm mb-6 text-center">
+                    Deseja salvar estes registros no banco de dados do sistema agora?
+                </p>
+
+                <div className="flex justify-end gap-3">
+                    <button 
+                        onClick={onClose}
+                        className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition"
+                    >
+                        Descartar
+                    </button>
+                    <button 
+                        onClick={() => { onConfirm(); onClose(); }}
+                        className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition shadow-lg flex items-center gap-2"
+                    >
+                        <Save className="h-4 w-4" />
+                        Salvar Dados
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // Bulk Action Modal
-const BulkActionModal = ({ isOpen, onClose, type, onConfirm }: { isOpen: boolean, onClose: () => void, type: 'status' | 'class', onConfirm: (data: any) => void }) => {
+const BulkActionModal = ({ 
+    isOpen, 
+    onClose, 
+    type, 
+    schools,
+    onConfirm 
+}: { 
+    isOpen: boolean, 
+    onClose: () => void, 
+    type: 'status' | 'class' | 'school', 
+    schools?: School[],
+    onConfirm: (data: any) => void 
+}) => {
     const [status, setStatus] = useState('Matriculado');
     const [className, setClassName] = useState('');
     const [grade, setGrade] = useState('');
     const [shift, setShift] = useState('Matutino');
+    const [targetSchool, setTargetSchool] = useState('');
 
     if (!isOpen) return null;
 
     const handleSubmit = () => {
         if (type === 'status') {
             onConfirm({ status });
+        } else if (type === 'school') {
+            if (!targetSchool) return; 
+            onConfirm({ school: targetSchool, status });
         } else {
             onConfirm({ className, grade, shift });
         }
         onClose();
     };
+
+    const getTitle = () => {
+        switch(type) {
+            case 'status': return 'Alterar Status em Massa';
+            case 'school': return 'Alocar Escola em Massa';
+            case 'class': return 'Atribuir Turma em Massa';
+            default: return 'Ação em Massa';
+        }
+    }
 
     return (
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -213,13 +301,13 @@ const BulkActionModal = ({ isOpen, onClose, type, onConfirm }: { isOpen: boolean
             <div className="bg-white rounded-2xl shadow-xl max-w-md w-full relative p-6 animate-in zoom-in-95 duration-200">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-bold text-slate-800">
-                        {type === 'status' ? 'Alterar Status em Massa' : 'Atribuir Turma em Massa'}
+                        {getTitle()}
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full"><X className="h-5 w-5" /></button>
                 </div>
                 
                 <div className="space-y-4 mb-6">
-                    {type === 'status' ? (
+                    {type === 'status' && (
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">Novo Status</label>
                             <select 
@@ -233,7 +321,40 @@ const BulkActionModal = ({ isOpen, onClose, type, onConfirm }: { isOpen: boolean
                             </select>
                             <p className="text-xs text-slate-500 mt-2">Isso atualizará o status de todos os alunos selecionados.</p>
                         </div>
-                    ) : (
+                    )}
+                    
+                    {type === 'school' && (
+                         <>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Escola de Destino</label>
+                                <select 
+                                    value={targetSchool}
+                                    onChange={(e) => setTargetSchool(e.target.value)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="">Selecione uma escola...</option>
+                                    {schools?.map(s => (
+                                        <option key={s.id} value={s.name}>{s.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">Definir Status como</label>
+                                <select 
+                                    value={status}
+                                    onChange={(e) => setStatus(e.target.value)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                >
+                                    <option value="Matriculado">Matriculado</option>
+                                    <option value="Pendente">Pendente</option>
+                                    <option value="Em Análise">Em Análise</option>
+                                </select>
+                            </div>
+                            <p className="text-xs text-slate-500">Os alunos selecionados serão movidos para esta escola com o status escolhido.</p>
+                        </>
+                    )}
+
+                    {type === 'class' && (
                         <>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Turma</label>
@@ -276,7 +397,143 @@ const BulkActionModal = ({ isOpen, onClose, type, onConfirm }: { isOpen: boolean
 
                 <div className="flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200">Cancelar</button>
-                    <button onClick={handleSubmit} className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md">Salvar Alterações</button>
+                    <button 
+                        onClick={handleSubmit} 
+                        disabled={type === 'school' && !targetSchool}
+                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Salvar Alterações
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// School Editor Modal
+const SchoolEditModal = ({
+    isOpen,
+    onClose,
+    onSave
+}: {
+    isOpen: boolean,
+    onClose: () => void,
+    onSave: (school: School) => void
+}) => {
+    const [schoolData, setSchoolData] = useState<Partial<School>>({
+        name: '',
+        address: '',
+        inep: '',
+        availableSlots: 0,
+        types: [SchoolType.INFANTIL],
+        lat: -12.5253,
+        lng: -40.2917,
+        rating: 5.0,
+        image: 'https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&q=80'
+    });
+
+    if (!isOpen) return null;
+
+    const handleSubmit = () => {
+        if (!schoolData.name || !schoolData.address) return;
+        const newSchool: School = {
+            id: `manual_school_${Date.now()}`,
+            ...schoolData as School
+        };
+        onSave(newSchool);
+        onClose();
+    };
+
+    const toggleType = (type: SchoolType) => {
+        setSchoolData(prev => {
+            const currentTypes = prev.types || [];
+            if (currentTypes.includes(type)) {
+                return { ...prev, types: currentTypes.filter(t => t !== type) };
+            } else {
+                return { ...prev, types: [...currentTypes, type] };
+            }
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={onClose}></div>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative animate-in zoom-in-95 duration-200 p-6">
+                <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <SchoolIcon className="h-6 w-6 text-blue-600" />
+                    Cadastrar Nova Escola
+                </h3>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Escola</label>
+                        <input 
+                            type="text"
+                            value={schoolData.name}
+                            onChange={e => setSchoolData({...schoolData, name: e.target.value.toUpperCase()})}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                            placeholder="ESCOLA MUNICIPAL..."
+                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Código INEP (Opcional)</label>
+                            <input 
+                                type="text"
+                                value={schoolData.inep}
+                                onChange={e => setSchoolData({...schoolData, inep: e.target.value})}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-1">Vagas Totais</label>
+                            <input 
+                                type="number"
+                                value={schoolData.availableSlots}
+                                onChange={e => setSchoolData({...schoolData, availableSlots: parseInt(e.target.value) || 0})}
+                                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Endereço</label>
+                        <input 
+                            type="text"
+                            value={schoolData.address}
+                            onChange={e => setSchoolData({...schoolData, address: e.target.value})}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder="Rua, Número, Bairro"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Modalidades de Ensino</label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {Object.values(SchoolType).map(type => (
+                                <label key={type} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer p-2 border rounded-lg hover:bg-slate-50">
+                                    <input 
+                                        type="checkbox"
+                                        checked={schoolData.types?.includes(type)}
+                                        onChange={() => toggleType(type)}
+                                        className="rounded text-blue-600 focus:ring-blue-500"
+                                    />
+                                    {type}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                    <button onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200">Cancelar</button>
+                    <button 
+                        onClick={handleSubmit} 
+                        className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md"
+                    >
+                        Salvar Escola
+                    </button>
                 </div>
             </div>
         </div>
@@ -544,6 +801,31 @@ const StudentDetailModal = ({
                           </div>
                       </section>
 
+                      {/* History Section */}
+                      {student.history && student.history.length > 0 && (
+                          <section>
+                              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                  <History className="h-3 w-3" /> Histórico de Alterações
+                              </h4>
+                              <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
+                                  {student.history.slice().reverse().map((entry, idx) => (
+                                      <div key={idx} className="p-3 border-b border-slate-100 last:border-0 flex justify-between items-start gap-3">
+                                          <div className="flex-1">
+                                              <p className="text-xs font-medium text-slate-800">{entry.action}</p>
+                                              <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                                                  <Users className="h-2 w-2" /> {entry.user}
+                                              </p>
+                                          </div>
+                                          <span className="text-[10px] text-slate-400 whitespace-nowrap bg-white px-1.5 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                                              <Clock className="h-2 w-2" />
+                                              {new Date(entry.date).toLocaleDateString()} {new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                      </div>
+                                  ))}
+                              </div>
+                          </section>
+                      )}
+
                   </div>
                   
                   <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
@@ -562,7 +844,7 @@ const StudentDetailModal = ({
 };
 
 export const AdminData: React.FC = () => {
-  const { schools, students, updateSchools, updateStudents, addStudent, removeStudent, resetData, lastBackupDate, registerBackup } = useData();
+  const { schools, students, updateSchools, updateStudents, addStudent, removeStudent, resetData, lastBackupDate, registerBackup, addSchool } = useData();
   const { addToast } = useToast();
   
   // Auth State
@@ -584,12 +866,14 @@ export const AdminData: React.FC = () => {
   const [previewData, setPreviewData] = useState<any[] | null>(null);
   const [importType, setImportType] = useState<'schools' | 'students' | 'educacenso' | null>(null);
   const [educacensoSchool, setEducacensoSchool] = useState<School | null>(null); 
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Reset Confirmation
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   // View State
   const [activeTab, setActiveTab] = useState<'students' | 'classes'>('students');
+  const [expandedClassKey, setExpandedClassKey] = useState<string | null>(null);
 
   // Student List Inspection States
   const [searchTerm, setSearchTerm] = useState('');
@@ -602,17 +886,14 @@ export const AdminData: React.FC = () => {
   
   // Manual Creation State
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreatingSchool, setIsCreatingSchool] = useState(false);
 
   // Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: keyof RegistryStudent; direction: 'asc' | 'desc' } | null>(null);
 
-  // Mass Allocation State
-  const [targetSchoolId, setTargetSchoolId] = useState('');
-  const [allocationMessage, setAllocationMessage] = useState('');
-
   // Bulk Actions State
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkActionModal, setBulkActionModal] = useState<{ isOpen: boolean, type: 'status' | 'class' | 'delete' }>({ isOpen: false, type: 'status' });
+  const [bulkActionModal, setBulkActionModal] = useState<{ isOpen: boolean, type: 'status' | 'class' | 'school' | 'delete' }>({ isOpen: false, type: 'status' });
 
   const handleLogin = (e: React.FormEvent) => {
       e.preventDefault();
@@ -751,6 +1032,7 @@ export const AdminData: React.FC = () => {
     setImportType(null);
     setEducacensoSchool(null);
     setProcessingStage('Iniciando...');
+    setShowImportModal(false);
 
     const reader = new FileReader();
 
@@ -783,6 +1065,7 @@ export const AdminData: React.FC = () => {
                      setPreviewData(mapStudentsFromData(parsed));
                      setImportType('students');
                  }
+                 setShowImportModal(true); // Open modal on success
               } else {
                  throw new Error("Formato JSON inválido ou vazio.");
               }
@@ -794,6 +1077,7 @@ export const AdminData: React.FC = () => {
                       setPreviewData(result.students);
                       setImportType('educacenso');
                       setEducacensoSchool(result.school);
+                      setShowImportModal(true); // Open modal on success
                   } else {
                       throw new Error("Nenhum aluno encontrado no arquivo do Educacenso.");
                   }
@@ -812,6 +1096,7 @@ export const AdminData: React.FC = () => {
                           setPreviewData(mapStudentsFromData(parsedData));
                           setImportType('students');
                       }
+                      setShowImportModal(true); // Open modal on success
                   } else {
                       throw new Error("Arquivo CSV vazio ou inválido.");
                   }
@@ -864,6 +1149,7 @@ export const AdminData: React.FC = () => {
       setUploadStatus('success');
       setPreviewData(null);
       setImportType(null);
+      setShowImportModal(false);
   };
 
   const cancelImport = () => {
@@ -871,22 +1157,8 @@ export const AdminData: React.FC = () => {
       setImportType(null);
       setUploadStatus('idle');
       setFeedbackMessage('');
+      setShowImportModal(false);
       addToast('Importação cancelada.', 'info');
-  };
-
-  const handleMassAllocation = () => {
-      if (!targetSchoolId) return;
-      const school = schools.find(s => s.id === targetSchoolId);
-      if (!school) return;
-
-      const unallocated = students.filter(s => !s.school || s.school === 'Não alocada');
-      
-      const studentsToUpdate = unallocated.map(s => ({ ...s, school: school.name, status: 'Matriculado' as const }));
-      updateStudents(studentsToUpdate);
-
-      setAllocationMessage(`${unallocated.length} alunos foram alocados para ${school.name}.`);
-      addToast(`${unallocated.length} alunos alocados com sucesso.`, 'success');
-      setTimeout(() => setAllocationMessage(''), 5000);
   };
 
   const executeReset = () => {
@@ -910,6 +1182,11 @@ export const AdminData: React.FC = () => {
     };
     setSelectedStudent(newStudent);
     setIsCreating(true);
+  };
+
+  const handleSaveSchool = (school: School) => {
+      addSchool(school);
+      addToast('Escola cadastrada com sucesso!', 'success');
   };
 
   // --- Handlers ---
@@ -1075,20 +1352,58 @@ export const AdminData: React.FC = () => {
       if (bulkActionModal.type === 'status') {
           const updatedStudents = students.map(s => {
               if (selectedIds.has(s.id)) {
-                  return { ...s, status: data.status };
+                  // Add History Log
+                  const historyItem: StudentHistory = {
+                      date: new Date().toISOString(),
+                      action: `Status alterado em massa para ${data.status}`,
+                      user: 'Gestor'
+                  };
+                  return { ...s, status: data.status, history: [...(s.history || []), historyItem] };
               }
               return s;
           });
           updateStudents(updatedStudents);
           addToast(`${selectedIds.size} alunos atualizados para "${data.status}".`, 'success');
+      } else if (bulkActionModal.type === 'school') {
+          const updatedStudents = students.map(s => {
+              if (selectedIds.has(s.id)) {
+                  // Add History Log
+                  const historyItem: StudentHistory = {
+                      date: new Date().toISOString(),
+                      action: `Alocado em massa para ${data.school} (${data.status})`,
+                      user: 'Gestor'
+                  };
+                  return { 
+                      ...s, 
+                      school: data.school, 
+                      status: data.status || 'Matriculado',
+                      history: [...(s.history || []), historyItem]
+                  };
+              }
+              return s;
+          });
+          updateStudents(updatedStudents);
+          addToast(`Escola "${data.school}" atribuída para ${selectedIds.size} alunos.`, 'success');
       } else if (bulkActionModal.type === 'class') {
           const updatedStudents = students.map(s => {
               if (selectedIds.has(s.id)) {
+                  const changes = [];
+                  if (data.className) changes.push(`Turma: ${data.className}`);
+                  if (data.grade) changes.push(`Etapa: ${data.grade}`);
+                  if (data.shift) changes.push(`Turno: ${data.shift}`);
+                  
+                  const historyItem: StudentHistory = {
+                      date: new Date().toISOString(),
+                      action: `Enturmação em massa: ${changes.join(', ')}`,
+                      user: 'Gestor'
+                  };
+
                   return { 
                       ...s, 
                       className: data.className || s.className,
                       grade: data.grade || s.grade,
-                      shift: data.shift || s.shift
+                      shift: data.shift || s.shift,
+                      history: [...(s.history || []), historyItem]
                   };
               }
               return s;
@@ -1112,10 +1427,38 @@ export const AdminData: React.FC = () => {
   };
 
   const handleSaveStudent = (updatedStudent: RegistryStudent) => {
+      const originalStudent = students.find(s => s.id === updatedStudent.id);
+      
       if (isCreating) {
+          const historyItem: StudentHistory = {
+              date: new Date().toISOString(),
+              action: 'Aluno cadastrado manualmente',
+              user: 'Gestor'
+          };
+          updatedStudent.history = [historyItem];
           addStudent(updatedStudent);
           addToast('Novo aluno cadastrado com sucesso!', 'success');
       } else {
+          // Detect changes for history
+          const changes = [];
+          if (originalStudent) {
+              if (originalStudent.status !== updatedStudent.status) changes.push(`Status: ${originalStudent.status} -> ${updatedStudent.status}`);
+              if (originalStudent.school !== updatedStudent.school) changes.push(`Escola: ${originalStudent.school || 'N/A'} -> ${updatedStudent.school || 'N/A'}`);
+              if (originalStudent.className !== updatedStudent.className) changes.push(`Turma: ${originalStudent.className || 'N/A'} -> ${updatedStudent.className || 'N/A'}`);
+              if (originalStudent.shift !== updatedStudent.shift) changes.push(`Turno: ${originalStudent.shift || 'N/A'} -> ${updatedStudent.shift || 'N/A'}`);
+          } else {
+              changes.push("Edição de dados");
+          }
+
+          if (changes.length > 0) {
+              const historyItem: StudentHistory = {
+                  date: new Date().toISOString(),
+                  action: changes.join('; '),
+                  user: 'Gestor'
+              };
+              updatedStudent.history = [...(originalStudent?.history || []), historyItem];
+          }
+
           updateStudents([updatedStudent]);
           addToast('Dados do aluno atualizados com sucesso.', 'success');
       }
@@ -1135,677 +1478,726 @@ export const AdminData: React.FC = () => {
     }> = {};
 
     filteredStudents.forEach(s => {
-      // Use filteredStudents so the class counts reflect the current filters
-      const key = `${s.school}_${s.className}`;
+      // Use filteredStudents so the class list respects the global filters
+      const className = s.className || 'Sem Turma';
+      const school = s.school || 'Sem Escola';
+      const key = `${school}-${className}`;
+
       if (!groups[key]) {
         groups[key] = {
           id: key,
-          school: s.school || 'Não alocada',
-          className: s.className || 'Sem Turma',
+          school,
+          className,
           grade: s.grade || '-',
           shift: s.shift || '-',
           count: 0
         };
       }
-      groups[key].count += 1;
+      groups[key].count++;
     });
 
-    return Object.values(groups).sort((a, b) => 
-        a.school.localeCompare(b.school) || a.className.localeCompare(b.className)
-    );
+    return Object.values(groups).sort((a, b) => a.school.localeCompare(b.school) || a.className.localeCompare(b.className));
   }, [filteredStudents]);
 
-  const maxClassCount = useMemo(() => {
-    if (groupedClasses.length === 0) return 0;
-    return Math.max(...groupedClasses.map(c => c.count));
-  }, [groupedClasses]);
+  const maxClassCount = Math.max(...groupedClasses.map(c => c.count), 1);
 
-  const handleExportClassCSV = (cls: any) => {
-      const classStudents = students.filter(s => {
-          const sSchool = s.school || 'Não alocada';
-          const sClass = s.className || 'Sem Turma';
-          return sSchool === cls.school && sClass === cls.className;
-      });
+  // --- CSV Export Logic ---
+  const handleExportFilteredCSV = () => {
+      // Logic for exporting data while respecting filters and encoding
+      
+      let csvContent = "";
+      
+      if (activeTab === 'classes') {
+          // Headers for Classes
+          csvContent += "Escola;Turma;Etapa;Turno;Qtd Alunos\n";
+          // Rows
+          groupedClasses.forEach(c => {
+              const row = [
+                  `"${c.school}"`,
+                  `"${c.className}"`,
+                  `"${c.grade}"`,
+                  `"${c.shift}"`,
+                  c.count
+              ];
+              csvContent += row.join(";") + "\n";
+          });
+      } else {
+          // Headers for Students - Add History
+          csvContent += "ID;Nome;CPF;Data Nascimento;Status;Escola;Turma;Etapa;Turno;Protocolo;Transporte;Deficiencia;Historico\n";
+          // Rows
+          sortedStudents.forEach(s => {
+              // Format history: [Date] Action (User)
+              const historyStr = s.history 
+                  ? s.history.map(h => `[${new Date(h.date).toLocaleDateString()} ${new Date(h.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}] ${h.action} (${h.user})`).join(' | ') 
+                  : '';
 
-      if (classStudents.length === 0) {
-          addToast("Turma vazia.", 'warning');
-          return;
+              const row = [
+                  `"${s.id}"`,
+                  `"${s.name}"`,
+                  `"${s.cpf || ''}"`,
+                  `"${s.birthDate}"`,
+                  `"${s.status}"`,
+                  `"${s.school || ''}"`,
+                  `"${s.className || ''}"`,
+                  `"${s.grade || ''}"`,
+                  `"${s.shift || ''}"`,
+                  `"${s.enrollmentId || ''}"`,
+                  s.transportRequest ? "Sim" : "Não",
+                  s.specialNeeds ? "Sim" : "Não",
+                  `"${historyStr}"`
+              ];
+              csvContent += row.join(";") + "\n";
+          });
       }
 
-      const headers = ["Nome do Aluno", "Matrícula", "Data de Nascimento", "CPF", "Status", "Transporte", "Deficiência"];
-      const rows = classStudents.sort((a,b) => a.name.localeCompare(b.name)).map(s => [
-          s.name, 
-          s.enrollmentId || '', 
-          s.birthDate || '', 
-          s.cpf || '', 
-          s.status, 
-          s.transportRequest ? 'Sim' : 'Não',
-          s.specialNeeds ? 'Sim' : 'Não'
-      ]);
-
-      const csvContent = [
-          headers.join(";"),
-          ...rows.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(";"))
-      ].join("\r\n");
-
-      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      // Add BOM for Excel UTF-8 compatibility
+      const bom = "\uFEFF";
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
+      
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Lista_${cls.className.replace(/[^a-z0-9]/gi, '_')}.csv`);
+      
+      // Dynamic Filename
+      const timestamp = new Date().toISOString().slice(0,10);
+      let filename = `exportacao_${activeTab}_${timestamp}`;
+      if (statusFilter !== 'Todos') filename += `_${statusFilter.toLowerCase()}`;
+      filename += ".csv";
+      
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      addToast(`Lista da turma exportada com sucesso.`, 'success');
   };
 
-  const handleExportFilteredCSV = () => {
-    // Uses sortedStudents which contains all items matching current filters and sort order
-    if (sortedStudents.length === 0) {
-        addToast("Nenhum registro para exportar com os filtros atuais.", 'warning');
-        return;
-    }
+  const handleExportClassList = (className: string) => {
+      const studentsInClass = sortedStudents.filter(s => s.className === className);
+      let csvContent = "Nome;CPF;Data Nascimento;Status\n";
+      studentsInClass.forEach(s => {
+          const row = [
+              `"${s.name}"`,
+              `"${s.cpf || ''}"`,
+              `"${s.birthDate}"`,
+              `"${s.status}"`
+          ];
+          csvContent += row.join(";") + "\n";
+      });
 
-    // Define headers corresponding to columns
-    const headers = [
-        "ID do Sistema", "Nome Completo", "CPF", "Data de Nascimento", "Status da Matrícula", 
-        "Escola Alocada", "Turma", "Etapa / Série", "Turno", "Solicitou Transporte?", "Possui Deficiência?", "Protocolo / Matrícula"
-    ];
+      const bom = "\uFEFF";
+      const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `lista_presenca_${className.replace(/\s+/g, '_')}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+  }
 
-    // Helper for safe CSV formatting
-    const escapeCsv = (text: any) => {
-        if (text === null || text === undefined) return '';
-        const str = String(text);
-        if (str.includes(';') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-
-    // Map data from SORTED students
-    const rows = sortedStudents.map(s => [
-        s.id,
-        s.name,
-        s.cpf, // Raw CPF is fine if escaped, or we can force string with quotes if needed for Excel to not truncate leading zeros. Usually Excel needs ="value" or just text.
-        s.birthDate,
-        s.status,
-        s.school || 'Não Alocada',
-        s.className,
-        s.grade,
-        s.shift,
-        s.transportRequest ? 'Sim' : 'Não',
-        s.specialNeeds ? 'Sim' : 'Não',
-        s.enrollmentId
-    ]);
-
-    const csvContent = [
-        headers.join(";"),
-        ...rows.map(row => row.map(escapeCsv).join(";"))
-    ].join("\r\n");
-
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    
-    // Generate filename with timestamp
-    const dateStr = new Date().toISOString().slice(0, 10);
-    link.setAttribute("download", `exportacao_alunos_${dateStr}.csv`);
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    addToast(`Exportação de ${sortedStudents.length} alunos realizada com sucesso.`, 'success');
-  };
-
+  // Pagination Logic
+  const totalPages = Math.ceil(sortedStudents.length / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = sortedStudents.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(sortedStudents.length / itemsPerPage);
+  const paginatedStudents = sortedStudents.slice(indexOfFirstItem, indexOfLastItem);
 
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
-
-  // Sort Icon Component
-  const SortIcon = ({ column }: { column: keyof RegistryStudent }) => {
-      if (sortConfig?.key !== column) return <ArrowUpDown className="h-3 w-3 text-slate-300 ml-1" />;
-      return sortConfig.direction === 'asc' 
-          ? <ArrowUp className="h-3 w-3 text-blue-600 ml-1" />
-          : <ArrowDown className="h-3 w-3 text-blue-600 ml-1" />;
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
-  const SortableHeader = ({ label, column, className = "" }: { label: string, column: keyof RegistryStudent, className?: string }) => (
-      <th 
-          className={`px-6 py-3 cursor-pointer hover:bg-slate-200 transition select-none group ${className}`}
-          onClick={() => handleSort(column)}
-      >
-          <div className="flex items-center gap-1">
-              {label}
-              <SortIcon column={column} />
-          </div>
-      </th>
-  );
+  const toggleClassExpansion = (classId: string) => {
+      setExpandedClassKey(prev => prev === classId ? null : classId);
+  };
 
-  // --- Render Login Overlay if not authenticated ---
   if (!isAuthenticated) {
       return (
           <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 max-w-md w-full animate-in zoom-in-95 duration-300">
-                  <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md text-center border border-slate-200">
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
                       <Lock className="h-8 w-8 text-blue-600" />
                   </div>
-                  <h2 className="text-2xl font-bold text-center text-slate-900 mb-2">Área Restrita</h2>
-                  <p className="text-center text-slate-500 mb-8">Esta área é destinada apenas para gestores autorizados. Por favor, identifique-se.</p>
-                  
+                  <h2 className="text-2xl font-bold text-slate-800 mb-2">Área Restrita</h2>
+                  <p className="text-slate-500 mb-6">Acesso exclusivo para gestores da Secretaria de Educação.</p>
                   <form onSubmit={handleLogin} className="space-y-4">
-                      <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">Código de Acesso</label>
-                          <input 
-                              type="password" 
-                              autoFocus
-                              placeholder="••••••••"
-                              value={passwordInput}
-                              onChange={(e) => setPasswordInput(e.target.value)}
-                              className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
-                          />
-                      </div>
-                      <button 
-                          type="submit"
-                          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200"
-                      >
-                          Acessar Painel
+                      <input 
+                          type="password" 
+                          placeholder="Senha de Acesso" 
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                      />
+                      <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-lg shadow-blue-200">
+                          Entrar no Sistema
                       </button>
                   </form>
+                  <p className="text-xs text-slate-400 mt-6">
+                      Ambiente seguro e monitorado.
+                  </p>
               </div>
           </div>
       );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12">
+    <div className="min-h-screen bg-slate-50 py-8 md:py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
         {/* Header Section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Gestão de Dados</h1>
-            <p className="text-slate-600 mt-1">Importe, gerencie e analise os dados da rede municipal.</p>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Gestão de Dados</h1>
+            <p className="text-slate-600">
+              Administre a base de alunos e escolas. <span className="font-semibold text-blue-600">{students.length}</span> alunos cadastrados.
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={() => {
-                if(window.confirm('Deseja fazer um backup antes de resetar?')) handleBackup();
-                setIsResetModalOpen(true);
-              }}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition text-sm font-medium"
-            >
-              <Trash2 className="h-4 w-4" />
-              Zerar Dados
-            </button>
-            <button 
-              onClick={handleBackup}
-              className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-sm font-medium"
-            >
-              <Save className="h-4 w-4" />
-              Backup Manual
-            </button>
-            <button 
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white border border-slate-800 rounded-lg hover:bg-slate-900 transition text-sm font-medium shadow-sm"
-            >
-              <LogOut className="h-4 w-4" />
-              Sair
-            </button>
+          <div className="flex gap-3">
+             <Link to="/dashboard" className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition flex items-center gap-2 font-medium">
+                <Layers className="h-4 w-4" />
+                Ir para Dashboard
+             </Link>
+             <button onClick={handleLogout} className="px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 transition flex items-center gap-2 font-medium">
+                <LogOut className="h-4 w-4" />
+                Sair
+             </button>
           </div>
         </div>
 
-        {/* --- Import Section --- */}
-        <div 
-          className={`bg-white rounded-2xl shadow-sm border-2 border-dashed transition-all duration-300 mb-8 overflow-hidden ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400'}`}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-        >
-          {isUploading ? (
-              <div className="p-12 flex flex-col items-center justify-center text-center">
-                  {uploadStatus === 'idle' && (
-                      <div className="animate-pulse flex flex-col items-center">
-                          <RefreshCw className="h-10 w-10 text-blue-500 animate-spin mb-4" />
-                          <h3 className="text-lg font-bold text-slate-800">{processingStage}</h3>
-                          <p className="text-slate-500 mt-2">Processando {uploadProgress}%</p>
-                      </div>
-                  )}
-                  {uploadStatus === 'success' && (
-                       <div className="flex flex-col items-center animate-in zoom-in-95">
-                          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                              <Check className="h-8 w-8 text-green-600" />
-                          </div>
-                          <h3 className="text-xl font-bold text-slate-800 mb-2">Sucesso!</h3>
-                          <p className="text-slate-600">{feedbackMessage}</p>
-                          <button onClick={resetUpload} className="mt-6 px-6 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition">
-                              Importar outro arquivo
-                          </button>
-                       </div>
-                  )}
-                   {uploadStatus === 'error' && (
-                       <div className="flex flex-col items-center animate-in zoom-in-95">
-                          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                              <AlertTriangle className="h-8 w-8 text-red-600" />
-                          </div>
-                          <h3 className="text-xl font-bold text-slate-800 mb-2">Erro na Importação</h3>
-                          <p className="text-red-600 font-medium">{feedbackMessage}</p>
-                          <button onClick={resetUpload} className="mt-6 px-6 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium transition">
-                              Tentar novamente
-                          </button>
-                       </div>
-                  )}
-              </div>
-          ) : previewData ? (
-             <div className="p-8">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-xl font-bold text-slate-800">Confirmar Importação</h3>
-                    <div className="flex gap-2">
-                        <button onClick={cancelImport} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancelar</button>
-                        <button onClick={confirmImport} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md">
-                            Confirmar Importação
-                        </button>
-                    </div>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-4">
-                     <p className="font-medium text-slate-700">Resumo:</p>
-                     <ul className="list-disc list-inside text-sm text-slate-600 mt-2 space-y-1">
-                         <li>Tipo de Dados: <span className="font-bold uppercase text-blue-600">{importType}</span></li>
-                         <li>Total de Registros: <span className="font-bold">{previewData.length}</span></li>
-                         {educacensoSchool && <li>Escola Vinculada: <span className="font-bold">{educacensoSchool.name}</span></li>}
-                     </ul>
-                </div>
-                <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-lg">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0">
-                            <tr>
-                                <th className="p-3">Nome / Descrição</th>
-                                <th className="p-3">ID / Código</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {previewData.slice(0, 10).map((item: any, idx: number) => (
-                                <tr key={idx} className="border-b border-slate-100">
-                                    <td className="p-3">{item.name}</td>
-                                    <td className="p-3 font-mono text-xs">{item.id || item.inep}</td>
-                                </tr>
-                            ))}
-                            {previewData.length > 10 && (
-                                <tr><td colSpan={2} className="p-3 text-center text-slate-500">... e mais {previewData.length - 10} registros</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-             </div>
-          ) : (
-             <div className="p-10 flex flex-col items-center justify-center text-center cursor-pointer" onClick={() => document.getElementById('fileInput')?.click()}>
-                <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110">
-                  <Upload className="h-8 w-8 text-blue-600" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900">Arraste arquivos aqui ou clique para selecionar</h3>
-                <p className="text-slate-500 mt-2 max-w-sm">
-                  Suporta arquivos .CSV do Excel, .JSON de backup ou exportações do Educacenso/Sige.
-                </p>
-                <input 
-                  type="file" 
-                  id="fileInput" 
-                  className="hidden" 
-                  accept=".csv,.json,.txt" 
-                  onChange={handleInputChange} 
-                />
-             </div>
-          )}
-        </div>
-
-        {/* --- Main Content Tabs --- */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[600px] flex flex-col">
-            
-            {/* Tab Header */}
-            <div className="border-b border-slate-200 flex items-center justify-between px-6 py-4 bg-slate-50/50">
-                <div className="flex gap-4">
-                    <button 
-                        onClick={() => setActiveTab('students')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${activeTab === 'students' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <Users className="h-4 w-4" />
-                        Alunos Cadastrados
-                    </button>
-                    <button 
-                         onClick={() => setActiveTab('classes')}
-                         className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${activeTab === 'classes' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
-                    >
-                        <Layers className="h-4 w-4" />
-                        Visão por Turmas
-                    </button>
-                </div>
-
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <Database className="h-4 w-4" />
-                    <span className="font-mono">{students.length}</span> registros
-                </div>
-            </div>
-            
-            {/* Filters Toolbar */}
-            <div className="p-4 border-b border-slate-200 grid grid-cols-1 lg:grid-cols-5 gap-4 bg-white">
-                <div className="lg:col-span-2 relative">
+        {/* Toolbar Section: Search, Filters, Actions */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-6 flex flex-col xl:flex-row gap-4 justify-between items-center sticky top-20 z-30">
+            <div className="flex flex-col sm:flex-row gap-4 w-full xl:w-auto">
+                {/* Search */}
+                <div className="relative w-full sm:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input 
                         type="text" 
-                        placeholder="Buscar por nome, CPF ou ID..." 
+                        placeholder="Buscar por nome, CPF..." 
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                 </div>
-                <select 
-                    value={schoolFilter}
-                    onChange={(e) => setSchoolFilter(e.target.value)}
-                    className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                    <option value="Todas">Todas as Escolas</option>
-                    <option value="Não alocada">Não Alocadas</option>
-                    {schoolNames.map(name => (
-                        <option key={name} value={name}>{name}</option>
-                    ))}
-                </select>
-                <select 
-                     value={statusFilter}
-                     onChange={(e) => setStatusFilter(e.target.value)}
-                     className="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
-                >
-                    <option value="Todos">Todos os Status</option>
-                    <option value="Matriculado">Matriculado</option>
-                    <option value="Pendente">Pendente</option>
-                    <option value="Em Análise">Em Análise</option>
-                </select>
-                
-                 {/* Action Buttons */}
-                <div className="flex gap-2">
-                     <button 
-                        onClick={clearFilters}
-                        className="px-3 py-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-                        title="Limpar Filtros"
+
+                {/* Filters */}
+                <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0 scrollbar-hide">
+                    <select 
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
                     >
-                        <Eraser className="h-4 w-4" />
-                    </button>
-                     <button 
-                        onClick={handleCreateStudent}
-                        className="flex-1 flex items-center justify-center gap-2 bg-blue-50 text-blue-700 border border-blue-200 px-4 py-2 rounded-lg hover:bg-blue-100 transition text-sm font-medium"
+                        <option value="Todos">Status: Todos</option>
+                        <option value="Matriculado">Matriculado</option>
+                        <option value="Pendente">Pendente</option>
+                        <option value="Em Análise">Em Análise</option>
+                    </select>
+                    
+                    <select 
+                        value={schoolFilter}
+                        onChange={(e) => setSchoolFilter(e.target.value)}
+                        className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none max-w-[150px]"
                     >
-                        <UserPlus className="h-4 w-4" />
-                        Novo
-                    </button>
-                    <button 
-                        onClick={handleExportFilteredCSV}
-                        className="flex-1 flex items-center justify-center gap-2 bg-green-50 text-green-700 border border-green-200 px-4 py-2 rounded-lg hover:bg-green-100 transition text-sm font-medium"
-                    >
-                        <FileSpreadsheet className="h-4 w-4" />
-                        Exportar
-                    </button>
+                        <option value="Todas">Escolas: Todas</option>
+                        {schoolNames.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+
+                    {activeTab === 'students' && (
+                        <select 
+                            value={classFilter}
+                            onChange={(e) => setClassFilter(e.target.value)}
+                            className="text-sm border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-500 outline-none max-w-[150px]"
+                        >
+                            <option value="Todas">Turmas: Todas</option>
+                            {classNames.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    )}
+                    
+                    {(searchTerm || schoolFilter !== 'Todas' || statusFilter !== 'Todos' || classFilter !== 'Todas') && (
+                        <button onClick={clearFilters} className="p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition" title="Limpar Filtros">
+                            <Eraser className="h-4 w-4" />
+                        </button>
+                    )}
                 </div>
             </div>
 
-            {/* Content Area */}
-            <div className="flex-1 overflow-auto bg-slate-50 relative">
-                
-                {/* Floating Bulk Action Bar */}
-                {selectedIds.size > 0 && (
-                    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-800 text-white rounded-full shadow-2xl px-6 py-3 flex items-center gap-6 animate-in slide-in-from-bottom-4">
-                        <span className="font-bold text-sm whitespace-nowrap border-r border-slate-600 pr-4">
-                            {selectedIds.size} selecionados
-                        </span>
-                        
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => setBulkActionModal({ isOpen: true, type: 'status' })}
-                                className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-700 rounded-lg transition text-xs font-medium"
-                            >
-                                <CheckSquare className="h-4 w-4" />
-                                Alterar Status
-                            </button>
-                            <button 
-                                onClick={() => setBulkActionModal({ isOpen: true, type: 'class' })}
-                                className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-slate-700 rounded-lg transition text-xs font-medium"
-                            >
-                                <Layout className="h-4 w-4" />
-                                Atribuir Turma
-                            </button>
-                            <button 
-                                onClick={handleBulkDelete}
-                                className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-900/50 text-red-300 rounded-lg transition text-xs font-medium"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                                Excluir
-                            </button>
-                        </div>
+            <div className="flex gap-3 w-full xl:w-auto justify-end">
+                 <button 
+                    onClick={() => setIsCreatingSchool(true)}
+                    className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm"
+                 >
+                    <PlusCircle className="h-4 w-4" />
+                    Nova Escola
+                 </button>
+                 <button 
+                    onClick={handleCreateStudent}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition flex items-center gap-2 shadow-sm"
+                 >
+                    <UserPlus className="h-4 w-4" />
+                    Novo Aluno
+                 </button>
+                 <button 
+                    onClick={handleExportFilteredCSV}
+                    className="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition flex items-center gap-2"
+                 >
+                    <Download className="h-4 w-4" />
+                    {activeTab === 'classes' ? 'Exportar Resumo' : 'Exportar Lista'}
+                 </button>
+            </div>
+        </div>
 
-                        <button onClick={() => setSelectedIds(new Set())} className="ml-2 hover:bg-slate-700 p-1 rounded-full">
-                            <X className="h-4 w-4" />
-                        </button>
-                    </div>
-                )}
+        {/* Tabs Control */}
+        <div className="flex gap-1 mb-0 border-b border-slate-200">
+            <button
+                onClick={() => setActiveTab('students')}
+                className={`px-6 py-3 text-sm font-medium rounded-t-lg transition flex items-center gap-2 border-t border-l border-r ${
+                    activeTab === 'students' 
+                    ? 'bg-white border-slate-200 border-b-transparent text-blue-600' 
+                    : 'bg-slate-50 border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+            >
+                <Users className="h-4 w-4" />
+                Alunos ({filteredStudents.length})
+            </button>
+            <button
+                onClick={() => setActiveTab('classes')}
+                className={`px-6 py-3 text-sm font-medium rounded-t-lg transition flex items-center gap-2 border-t border-l border-r ${
+                    activeTab === 'classes' 
+                    ? 'bg-white border-slate-200 border-b-transparent text-blue-600' 
+                    : 'bg-slate-50 border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+            >
+                <Layout className="h-4 w-4" />
+                Turmas ({groupedClasses.length})
+            </button>
+        </div>
 
-
-                {/* Tab: Students Table */}
-                {activeTab === 'students' && (
-                    <table className="w-full text-sm text-left border-collapse">
-                        <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-10 shadow-sm">
-                            <tr>
-                                <th className="px-4 py-3 w-10">
-                                    <button onClick={handleSelectAll} className="flex items-center justify-center text-slate-400 hover:text-blue-600">
-                                        {selectedIds.size > 0 && selectedIds.size === sortedStudents.length ? <CheckSquare className="h-5 w-5" /> : selectedIds.size > 0 ? <MinusSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
-                                    </button>
-                                </th>
-                                <SortableHeader label="Nome do Aluno" column="name" />
-                                <SortableHeader label="CPF" column="cpf" className="hidden md:table-cell" />
-                                <SortableHeader label="Escola" column="school" className="hidden sm:table-cell" />
-                                <SortableHeader label="Turma" column="className" className="hidden lg:table-cell" />
-                                <SortableHeader label="Status" column="status" />
-                                <th className="px-6 py-3 text-right">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 bg-white">
-                            {currentItems.length > 0 ? (
-                                currentItems.map((student) => (
-                                    <tr key={student.id} className={`hover:bg-blue-50/50 transition ${selectedIds.has(student.id) ? 'bg-blue-50' : ''}`}>
-                                        <td className="px-4 py-3">
-                                            <button onClick={() => toggleSelection(student.id)} className={`flex items-center justify-center ${selectedIds.has(student.id) ? 'text-blue-600' : 'text-slate-300 hover:text-slate-400'}`}>
-                                                {selectedIds.has(student.id) ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-3 font-medium text-slate-900">
-                                            <button onClick={() => setSelectedStudent(student)} className="hover:text-blue-600 hover:underline text-left">
-                                                {student.name}
-                                            </button>
-                                            <div className="md:hidden text-xs text-slate-500 mt-0.5">{student.cpf}</div>
-                                        </td>
-                                        <td className="px-6 py-3 font-mono text-slate-600 hidden md:table-cell">{student.cpf || '-'}</td>
-                                        <td className="px-6 py-3 text-slate-600 hidden sm:table-cell">
-                                            {student.school || <span className="text-slate-400 italic">Não alocada</span>}
-                                        </td>
-                                        <td className="px-6 py-3 hidden lg:table-cell">
-                                            {student.className ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-xs font-medium text-slate-700 border border-slate-200">
-                                                    {student.className}
-                                                </span>
-                                            ) : '-'}
-                                        </td>
-                                        <td className="px-6 py-3">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase ${
-                                                student.status === 'Matriculado' ? 'bg-green-100 text-green-700' : 
-                                                student.status === 'Em Análise' ? 'bg-blue-100 text-blue-700' : 
-                                                'bg-yellow-100 text-yellow-700'
-                                            }`}>
-                                                {student.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-3 text-right">
-                                            <button 
-                                                onClick={() => setSelectedStudent(student)}
-                                                className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                title="Ver Detalhes"
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
+        {/* Main Content Area */}
+        <div className="bg-white rounded-b-xl rounded-tr-xl shadow-sm border border-slate-200 border-t-0 overflow-hidden min-h-[500px] flex flex-col">
+            
+            {/* STUDENTS TAB */}
+            {activeTab === 'students' && (
+                <>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                                 <tr>
-                                    <td colSpan={7} className="py-12 text-center text-slate-500">
-                                        Nenhum aluno encontrado com os filtros atuais.
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
-                
-                {/* Tab: Classes Table */}
-                {activeTab === 'classes' && (
-                     <div className="p-0">
-                        <table className="w-full text-sm text-left border-collapse">
-                            <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-10 shadow-sm">
-                                <tr>
-                                    <th className="px-6 py-3">Escola</th>
-                                    <th className="px-6 py-3">Turma</th>
-                                    <th className="px-6 py-3">Etapa / Série</th>
-                                    <th className="px-6 py-3">Turno</th>
-                                    <th className="px-6 py-3 text-center">Total Alunos</th>
-                                    <th className="px-6 py-3 text-right">Ações</th>
+                                    <th className="px-6 py-4 w-10">
+                                        <input 
+                                            type="checkbox" 
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                            checked={selectedIds.size > 0 && selectedIds.size === sortedStudents.length}
+                                            onChange={handleSelectAll}
+                                        />
+                                    </th>
+                                    <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => handleSort('name')}>
+                                        <div className="flex items-center gap-1">Nome {sortConfig?.key === 'name' && (sortConfig.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                    </th>
+                                    <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => handleSort('cpf')}>
+                                        <div className="flex items-center gap-1">CPF {sortConfig?.key === 'cpf' && (sortConfig.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                    </th>
+                                    <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => handleSort('school')}>
+                                        <div className="flex items-center gap-1">Escola {sortConfig?.key === 'school' && (sortConfig.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                    </th>
+                                    <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => handleSort('className')}>
+                                        <div className="flex items-center gap-1">Turma {sortConfig?.key === 'className' && (sortConfig.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                    </th>
+                                    <th className="px-6 py-4 cursor-pointer hover:bg-slate-100 transition" onClick={() => handleSort('status')}>
+                                        <div className="flex items-center gap-1">Status {sortConfig?.key === 'status' && (sortConfig.direction === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                    </th>
+                                    <th className="px-6 py-4 text-right">Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 bg-white">
-                                {groupedClasses.length > 0 ? (
-                                    groupedClasses.map((cls) => (
-                                        <tr key={cls.id} className="hover:bg-slate-50 transition">
-                                            <td className="px-6 py-4 font-medium text-slate-800">{cls.school}</td>
+                            <tbody className="divide-y divide-slate-100">
+                                {paginatedStudents.length > 0 ? (
+                                    paginatedStudents.map((student) => (
+                                        <tr key={student.id} className={`hover:bg-slate-50 transition group ${selectedIds.has(student.id) ? 'bg-blue-50/50' : ''}`}>
                                             <td className="px-6 py-4">
-                                                <span className="font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">
-                                                    {cls.className}
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                    checked={selectedIds.has(student.id)}
+                                                    onChange={() => toggleSelection(student.id)}
+                                                />
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <button 
+                                                    onClick={() => setSelectedStudent(student)}
+                                                    className="font-medium text-slate-900 hover:text-blue-600 hover:underline text-left block"
+                                                >
+                                                    {student.name}
+                                                </button>
+                                                {student.enrollmentId && <span className="text-xs text-slate-400 font-mono block mt-0.5">{student.enrollmentId}</span>}
+                                            </td>
+                                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{student.cpf || '-'}</td>
+                                            <td className="px-6 py-4 text-slate-600 text-xs truncate max-w-[200px]">{student.school || '-'}</td>
+                                            <td className="px-6 py-4 text-slate-600 text-xs">
+                                                {student.className ? (
+                                                    <span className="bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">{student.className}</span>
+                                                ) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${
+                                                    student.status === 'Matriculado' ? 'bg-green-100 text-green-700' : 
+                                                    student.status === 'Em Análise' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                                                }`}>
+                                                    {student.status}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 text-slate-600">{cls.grade}</td>
-                                            <td className="px-6 py-4 text-slate-600">{cls.shift}</td>
-                                            <td className="px-6 py-4 text-center">
-                                                <div className="flex flex-col items-center justify-center gap-1.5">
-                                                    <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full bg-slate-100 font-bold text-slate-700 text-xs">
-                                                        {cls.count}
-                                                    </span>
-                                                    {maxClassCount > 0 && (
-                                                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                            <div 
-                                                                className="h-full bg-blue-500 rounded-full transition-all duration-500" 
-                                                                style={{ width: `${(cls.count / maxClassCount) * 100}%` }}
-                                                            ></div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </td>
                                             <td className="px-6 py-4 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button 
-                                                        onClick={() => handleExportClassCSV(cls)}
-                                                        className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
-                                                        title="Baixar Lista da Turma"
-                                                    >
-                                                        <Download className="h-4 w-4" />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => {
-                                                            setActiveTab('students');
-                                                            setSchoolFilter(cls.school === 'Não alocada' ? 'Não alocada' : cls.school);
-                                                            setClassFilter(cls.className);
-                                                        }}
-                                                        className="text-blue-600 hover:text-blue-800 text-xs font-bold px-3 py-1.5 bg-blue-50 rounded-lg hover:bg-blue-100 transition"
-                                                    >
-                                                        Ver Lista
-                                                    </button>
-                                                </div>
+                                                <button 
+                                                    onClick={() => setSelectedStudent(student)}
+                                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                    title="Ver Detalhes / Editar"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td colSpan={6} className="py-12 text-center text-slate-500">
-                                            Nenhum turma encontrada.
+                                        <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                            Nenhum aluno encontrado com os filtros atuais.
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
-                     </div>
-                )}
-
-            </div>
-            
-            {/* Pagination Footer */}
-            {activeTab === 'students' && totalPages > 1 && (
-                <div className="border-t border-slate-200 p-4 bg-white flex justify-between items-center">
-                    <span className="text-sm text-slate-500">
-                        Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, sortedStudents.length)} de {sortedStudents.length}
-                    </span>
-                    <div className="flex gap-2">
-                        <button 
-                            onClick={() => paginate(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            className="p-2 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-50"
-                        >
-                            <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        {[...Array(totalPages)].map((_, i) => (
-                             // Logic to show limited pages if too many
-                             (i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 1 && i + 1 <= currentPage + 1)) ? (
-                                <button
-                                    key={i}
-                                    onClick={() => paginate(i + 1)}
-                                    className={`w-8 h-8 rounded-lg text-sm font-medium ${currentPage === i + 1 ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
-                                >
-                                    {i + 1}
-                                </button>
-                             ) : (
-                                 (i + 1 === 2 || i + 1 === totalPages - 1) && <span key={i} className="px-1 text-slate-400">...</span>
-                             )
-                        ))}
-                        <button 
-                            onClick={() => paginate(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            className="p-2 border border-slate-200 rounded-lg disabled:opacity-50 hover:bg-slate-50"
-                        >
-                            <ChevronRight className="h-4 w-4" />
-                        </button>
                     </div>
+
+                    {/* Pagination */}
+                    <div className="border-t border-slate-200 p-4 flex items-center justify-between mt-auto bg-slate-50">
+                        <span className="text-sm text-slate-500">
+                            Mostrando {indexOfFirstItem + 1} a {Math.min(indexOfLastItem, sortedStudents.length)} de {sortedStudents.length} alunos
+                        </span>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="p-2 border border-slate-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                let pageNum = i + 1;
+                                if (totalPages > 5 && currentPage > 3) {
+                                    pageNum = currentPage - 3 + i;
+                                    if (pageNum > totalPages) pageNum = i + 1; // Fallback logic simplified
+                                }
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => handlePageChange(pageNum)}
+                                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-medium ${
+                                            currentPage === pageNum
+                                                ? 'bg-blue-600 text-white'
+                                                : 'border border-slate-300 hover:bg-white text-slate-600'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                            <button
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="p-2 border border-slate-300 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <ChevronRight className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* CLASSES TAB */}
+            {activeTab === 'classes' && (
+                <div className="overflow-x-auto p-4">
+                    {groupedClasses.length > 0 ? (
+                        <table className="w-full text-sm text-left border-collapse">
+                            <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                                <tr>
+                                    <th className="px-6 py-4 w-10"></th>
+                                    <th className="px-6 py-4">Escola</th>
+                                    <th className="px-6 py-4">Turma</th>
+                                    <th className="px-6 py-4">Etapa</th>
+                                    <th className="px-6 py-4">Turno</th>
+                                    <th className="px-6 py-4">Total Alunos</th>
+                                    <th className="px-6 py-4 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {groupedClasses.map((cls) => {
+                                    const occupancy = (cls.count / maxClassCount) * 100;
+                                    const isExpanded = expandedClassKey === cls.id;
+                                    const classStudents = isExpanded 
+                                        ? filteredStudents.filter(s => 
+                                            (s.school || 'Sem Escola') === cls.school && 
+                                            (s.className || 'Sem Turma') === cls.className
+                                          )
+                                        : [];
+
+                                    return (
+                                        <React.Fragment key={cls.id}>
+                                            <tr 
+                                                className={`hover:bg-slate-50 transition cursor-pointer ${isExpanded ? 'bg-slate-50' : ''}`}
+                                                onClick={() => toggleClassExpansion(cls.id)}
+                                            >
+                                                <td className="px-6 py-4">
+                                                    <div className="text-slate-400">
+                                                        {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 font-medium text-slate-800">{cls.school}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold border border-indigo-100">
+                                                        {cls.className}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-slate-600">{cls.grade}</td>
+                                                <td className="px-6 py-4 text-slate-600">{cls.shift}</td>
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-slate-800 w-6">{cls.count}</span>
+                                                        <div className="h-1.5 w-24 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div 
+                                                                className={`h-full rounded-full ${cls.count > 25 ? 'bg-red-500' : 'bg-blue-500'}`} 
+                                                                style={{ width: `${Math.min(occupancy, 100)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button 
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleExportClassList(cls.className);
+                                                        }}
+                                                        className="text-blue-600 hover:bg-blue-50 p-2 rounded-lg transition"
+                                                        title="Baixar Lista de Chamada"
+                                                    >
+                                                        <Download className="h-4 w-4" />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr className="bg-slate-50/50">
+                                                    <td colSpan={7} className="px-6 py-4 border-t border-slate-100">
+                                                        <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm animate-in slide-in-from-top-2">
+                                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lista de Alunos</h4>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                                {classStudents.map(student => (
+                                                                    <div key={student.id} className="flex items-center justify-between p-2 rounded border border-slate-100 bg-slate-50 hover:bg-white hover:border-blue-200 transition text-xs">
+                                                                        <div>
+                                                                            <p className="font-medium text-slate-800">{student.name}</p>
+                                                                            <p className="text-slate-500 font-mono text-[10px]">{student.cpf || 'Sem CPF'}</p>
+                                                                        </div>
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                                                            student.status === 'Matriculado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                                                                        }`}>
+                                                                            {student.status}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                            <Layout className="h-12 w-12 mb-3 opacity-20" />
+                            <p>Nenhuma turma encontrada.</p>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
+
+        {/* Floating Bulk Action Bar */}
+        {selectedIds.size > 0 && activeTab === 'students' && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl z-40 flex items-center gap-6 animate-in slide-in-from-bottom-4">
+                <span className="font-bold text-sm bg-slate-700 px-2 py-0.5 rounded flex items-center gap-2">
+                    <CheckSquare className="h-4 w-4" />
+                    {selectedIds.size} selecionados
+                </span>
+                
+                <div className="h-4 w-px bg-slate-700"></div>
+
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setBulkActionModal({ isOpen: true, type: 'status' })}
+                        className="hover:text-blue-300 transition text-sm font-medium flex items-center gap-1.5"
+                    >
+                        <RefreshCw className="h-4 w-4" /> Alterar Status
+                    </button>
+                    <button 
+                        onClick={() => setBulkActionModal({ isOpen: true, type: 'class' })}
+                        className="hover:text-blue-300 transition text-sm font-medium flex items-center gap-1.5"
+                    >
+                        <Layout className="h-4 w-4" /> Atribuir Turma
+                    </button>
+                    <button 
+                        onClick={() => setBulkActionModal({ isOpen: true, type: 'school' })}
+                        className="hover:text-blue-300 transition text-sm font-medium flex items-center gap-1.5"
+                    >
+                        <SchoolIcon className="h-4 w-4" /> Alocar Escola
+                    </button>
+                    <button 
+                        onClick={() => setBulkActionModal({ isOpen: true, type: 'delete' })}
+                        className="hover:text-red-400 transition text-sm font-medium flex items-center gap-1.5 text-red-300 ml-2"
+                    >
+                        <Trash2 className="h-4 w-4" /> Excluir
+                    </button>
+                </div>
+
+                <button onClick={() => setSelectedIds(new Set())} className="ml-2 hover:bg-white/10 p-1 rounded-full transition">
+                    <X className="h-4 w-4" />
+                </button>
+            </div>
+        )}
+
+        {/* Import/Reset Zone (Collapsible or Bottom) */}
+        <div className="mt-8 border-t border-slate-200 pt-8">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                <Database className="h-5 w-5 text-slate-400" />
+                Manutenção do Sistema
+            </h3>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+                {/* Import Box */}
+                <div 
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors relative ${
+                        isDragging ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-slate-400'
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                >
+                    {isUploading ? (
+                        <div className="flex flex-col items-center">
+                            <RefreshCw className="h-10 w-10 text-blue-600 animate-spin mb-4" />
+                            <p className="text-slate-600 font-medium">{processingStage}</p>
+                            <div className="w-64 h-2 bg-slate-100 rounded-full mt-3 overflow-hidden">
+                                <div className="h-full bg-blue-600 transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                            </div>
+                        </div>
+                    ) : uploadStatus === 'success' ? (
+                        <div className="flex flex-col items-center animate-in zoom-in">
+                            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-4">
+                                <Check className="h-8 w-8" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800 mb-1">Processado com Sucesso!</h3>
+                            <p className="text-slate-600 text-sm mb-4">{feedbackMessage}</p>
+                            <button onClick={resetUpload} className="text-blue-600 hover:underline text-sm font-medium">
+                                Importar outro arquivo
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center pointer-events-none">
+                            <Upload className="h-10 w-10 text-slate-400 mb-3" />
+                            <p className="text-slate-600 font-medium mb-1">Arraste e solte arquivos aqui</p>
+                            <p className="text-xs text-slate-400 mb-4">Suporta CSV do Educacenso ou Backup JSON</p>
+                            <label className="pointer-events-auto px-4 py-2 bg-white border border-slate-300 rounded-lg shadow-sm text-slate-700 text-sm font-bold hover:bg-slate-50 cursor-pointer transition">
+                                Selecionar Arquivo
+                                <input type="file" className="hidden" accept=".csv,.json,.txt" onChange={handleInputChange} />
+                            </label>
+                        </div>
+                    )}
+                </div>
+
+                {/* Reset & Backup Actions */}
+                <div className="space-y-4">
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-full">
+                        <div>
+                            <h4 className="font-bold text-slate-800 mb-2">Cópia de Segurança</h4>
+                            <p className="text-sm text-slate-500 mb-4">
+                                Baixe todos os dados cadastrados localmente para prevenir perdas.
+                                {lastBackupDate && <span className="block mt-2 text-xs text-green-600 flex items-center gap-1"><Check className="h-3 w-3" /> Último backup: {new Date(lastBackupDate).toLocaleDateString()}</span>}
+                            </p>
+                        </div>
+                        <button 
+                            onClick={handleBackup}
+                            className="w-full py-3 bg-blue-50 text-blue-700 font-bold rounded-lg hover:bg-blue-100 transition flex items-center justify-center gap-2 border border-blue-100"
+                        >
+                            <Download className="h-5 w-5" />
+                            Baixar Backup Completo
+                        </button>
+                    </div>
+
+                    <div className="bg-red-50 p-6 rounded-xl border border-red-100 flex flex-col justify-between">
+                        <div>
+                            <h4 className="font-bold text-red-800 mb-2">Zona de Perigo</h4>
+                            <p className="text-sm text-red-600 mb-4">
+                                Restaurar os dados originais de fábrica apagará todas as importações e edições.
+                            </p>
+                        </div>
+                        <button 
+                            onClick={() => setIsResetModalOpen(true)}
+                            className="w-full py-3 bg-white border border-red-200 text-red-600 font-bold rounded-lg hover:bg-red-600 hover:text-white transition flex items-center justify-center gap-2"
+                        >
+                            <Trash2 className="h-5 w-5" />
+                            Zerar Sistema
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
       </div>
-      
+
       {/* Modals */}
       <ConfirmationModal 
         isOpen={isResetModalOpen}
         onClose={() => setIsResetModalOpen(false)}
         onConfirm={executeReset}
         title="Tem certeza absoluta?"
-        message="Esta ação apagará todos os alunos e escolas do sistema e restaurará os dados de demonstração. Esta ação não pode ser desfeita sem um backup prévio."
-        confirmText="Sim, Zerar Tudo"
+        message="Esta ação é irreversível. Todos os alunos e escolas importados serão apagados e o sistema voltará ao estado inicial de demonstração."
+        confirmText="Sim, Apagar Tudo"
+      />
+
+      <ConfirmationModal 
+        isOpen={bulkActionModal.isOpen && bulkActionModal.type === 'delete'}
+        onClose={() => setBulkActionModal({ ...bulkActionModal, isOpen: false })}
+        onConfirm={handleBulkDelete}
+        title={`Excluir ${selectedIds.size} alunos?`}
+        message="Os registros selecionados serão removidos permanentemente do sistema. Confirme para continuar."
+        confirmText="Excluir Registros"
+      />
+
+      <ImportModal 
+        isOpen={showImportModal}
+        onClose={cancelImport}
+        onConfirm={confirmImport}
+        dataLength={previewData?.length || 0}
+        type={importType}
+        schoolName={educacensoSchool?.name}
       />
 
       <BulkActionModal 
-        isOpen={bulkActionModal.isOpen}
+        isOpen={bulkActionModal.isOpen && bulkActionModal.type !== 'delete'}
         onClose={() => setBulkActionModal({ ...bulkActionModal, isOpen: false })}
         type={bulkActionModal.type as any}
+        schools={schools}
         onConfirm={executeBulkAction}
       />
 
       <StudentDetailModal 
-        student={selectedStudent} 
+        student={selectedStudent}
         isCreating={isCreating}
-        onClose={() => { setSelectedStudent(null); setIsCreating(false); }} 
-        onSave={handleSaveStudent}
         schools={schools}
+        onClose={() => { setSelectedStudent(null); setIsCreating(false); }}
+        onSave={handleSaveStudent}
       />
+
+      <SchoolEditModal 
+        isOpen={isCreatingSchool}
+        onClose={() => setIsCreatingSchool(false)}
+        onSave={handleSaveSchool}
+      />
+
     </div>
   );
 };

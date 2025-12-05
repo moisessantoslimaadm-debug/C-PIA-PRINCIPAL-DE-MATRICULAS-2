@@ -6,6 +6,7 @@ import { useToast } from '../contexts/ToastContext';
 import { RegistrationFormState, RegistryStudent } from '../types';
 import { Check, ChevronRight, ChevronLeft, Upload, School as SchoolIcon, Bus, FileText, ListChecks, MapPin, Navigation, AlertCircle, Loader2, Search, RefreshCw, Crosshair } from 'lucide-react';
 import { useNavigate } from '../router';
+import { loadLeaflet } from '../services/leafletLoader';
 
 // Declare Leaflet globally
 declare const L: any;
@@ -328,58 +329,76 @@ export const Registration: React.FC = () => {
 
   // Initialize Map Picker when Step 3 is active
   useEffect(() => {
-    if (formState.step === 3 && mapContainerRef.current && !mapRef.current) {
-        // Default Center (Itaberaba)
-        const defaultLat = -12.5253;
-        const defaultLng = -40.2917;
-        const initialLat = formState.address.lat || defaultLat;
-        const initialLng = formState.address.lng || defaultLng;
+    if (formState.step !== 3 || !mapContainerRef.current) return;
 
-        const map = L.map(mapContainerRef.current).setView([initialLat, initialLng], 15);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
+    let isMounted = true;
 
-        mapRef.current = map;
+    const initMap = async () => {
+        try {
+            await loadLeaflet();
+            if (!isMounted) return;
+            if (mapRef.current) return; // Already initialized
 
-        // Custom Icon
-        const markerIcon = L.icon({
-             iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-             shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-             iconSize: [25, 41],
-             iconAnchor: [12, 41],
-             popupAnchor: [1, -34],
-        });
+            // Default Center (Itaberaba)
+            const defaultLat = -12.5253;
+            const defaultLng = -40.2917;
+            const initialLat = formState.address.lat || defaultLat;
+            const initialLng = formState.address.lng || defaultLng;
 
-        const updatePosition = (lat: number, lng: number) => {
-            reverseGeocode(lat, lng);
-        };
+            const map = L.map(mapContainerRef.current!).setView([initialLat, initialLng], 15);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
 
-        // Add Marker if coordinates exist, or center
-        const markerLat = formState.address.lat || initialLat;
-        const markerLng = formState.address.lng || initialLng;
+            mapRef.current = map;
 
-        const marker = L.marker([markerLat, markerLng], { 
-             draggable: true,
-             icon: markerIcon 
-        }).addTo(map);
-        markerRef.current = marker;
+            // Custom Icon
+            const markerIcon = L.icon({
+                iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+            });
 
-        marker.on('dragend', (e: any) => {
-             const newPos = e.target.getLatLng();
-             updatePosition(newPos.lat, newPos.lng);
-        });
+            const updatePosition = (lat: number, lng: number) => {
+                reverseGeocode(lat, lng);
+            };
 
-        // Click handler to move/add marker
-        map.on('click', (e: any) => {
-            marker.setLatLng(e.latlng);
-            updatePosition(e.latlng.lat, e.latlng.lng);
-        });
-    }
+            // Add Marker if coordinates exist, or center
+            const markerLat = formState.address.lat || initialLat;
+            const markerLng = formState.address.lng || initialLng;
+
+            const marker = L.marker([markerLat, markerLng], { 
+                draggable: true,
+                icon: markerIcon 
+            }).addTo(map);
+            markerRef.current = marker;
+
+            marker.on('dragend', (e: any) => {
+                const newPos = e.target.getLatLng();
+                updatePosition(newPos.lat, newPos.lng);
+            });
+
+            // Click handler to move/add marker
+            map.on('click', (e: any) => {
+                marker.setLatLng(e.latlng);
+                updatePosition(e.latlng.lat, e.latlng.lng);
+            });
+
+            // Force size update
+            setTimeout(() => map.invalidateSize(), 100);
+
+        } catch (e) {
+            console.error("Failed to load map", e);
+        }
+    };
+
+    initMap();
 
     // Update marker if coordinates change externally (e.g., from typing search)
-    if (formState.step === 3 && mapRef.current && markerRef.current && formState.address.lat && formState.address.lng) {
+    if (mapRef.current && markerRef.current && formState.address.lat && formState.address.lng) {
         const currentLatLng = markerRef.current.getLatLng();
         // Only update map if the distance is significant to avoid loops or jitter during drags
         if (Math.abs(currentLatLng.lat - formState.address.lat) > 0.0001 || Math.abs(currentLatLng.lng - formState.address.lng) > 0.0001) {
@@ -388,11 +407,11 @@ export const Registration: React.FC = () => {
         }
     }
 
-    // If map already exists, ensure size is correct (in case of tab switch/animation)
-    if (formState.step === 3 && mapRef.current) {
-        setTimeout(() => mapRef.current.invalidateSize(), 100);
-    }
-  }, [formState.step]); // Removed formState.address dependency from useEffect to prevent loops, handled logic inside
+    return () => {
+        isMounted = false;
+        // We generally keep map instance if step 3 is active to avoid reload, but strict cleanup if unmounted
+    };
+  }, [formState.step, formState.address.lat]); 
 
 
   const nextStep = () => {

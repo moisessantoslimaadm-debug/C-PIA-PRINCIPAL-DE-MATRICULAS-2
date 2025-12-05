@@ -7,6 +7,7 @@ import {
   Activity, CheckCircle, Clock, Baby, GraduationCap, Info, Map as MapIcon, Layers, Save, Download
 } from 'lucide-react';
 import { SchoolType } from '../types';
+import { loadLeaflet } from '../services/leafletLoader';
 
 // Declare Leaflet globally
 declare const L: any;
@@ -192,32 +193,71 @@ const StudentDensityMap: React.FC = () => {
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<any>(null);
     const heatLayerRef = useRef<any>(null);
+    const hasFitBoundsRef = useRef(false);
     const [viewType, setViewType] = useState<'all' | 'pending'>('all');
     const [isMapReady, setIsMapReady] = useState(false);
 
     // Initialize Map only after container is mounted and has dimensions
     useEffect(() => {
         if (!mapContainerRef.current) return;
-        if (typeof L === 'undefined') return;
 
-        // Ensure container has dimensions before initializing
-        const { clientWidth, clientHeight } = mapContainerRef.current;
-        if (clientWidth === 0 || clientHeight === 0) return;
+        let isMounted = true;
 
-        // Initialize Map
-        if (!mapRef.current) {
-            const map = L.map(mapContainerRef.current).setView([-12.5253, -40.2917], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-            mapRef.current = map;
-            
-            // Force update size after a tick to ensure correct rendering context
-            setTimeout(() => {
-                map.invalidateSize();
-                setIsMapReady(true);
-            }, 100);
-        }
+        const initMap = async () => {
+            try {
+                await loadLeaflet();
+                if (!isMounted) return;
+                
+                if (typeof L === 'undefined') return;
+
+                // ResizeObserver to ensure map handles container resizes gracefully
+                const resizeObserver = new ResizeObserver(() => {
+                    if (mapRef.current) {
+                        mapRef.current.invalidateSize();
+                    }
+                });
+                resizeObserver.observe(mapContainerRef.current!);
+
+                // Ensure container has dimensions before initializing
+                const { clientWidth, clientHeight } = mapContainerRef.current!;
+                if (clientWidth === 0 || clientHeight === 0) return;
+
+                // Initialize Map
+                if (!mapRef.current) {
+                    const map = L.map(mapContainerRef.current!, {
+                        zoomControl: true,
+                        attributionControl: false
+                    });
+                    
+                    // Initial view (fallback), will be overridden by fitBounds later
+                    map.setView([-12.5253, -40.2917], 13);
+                    
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap contributors'
+                    }).addTo(map);
+                    
+                    mapRef.current = map;
+                    
+                    // Force update size after a tick to ensure correct rendering context
+                    setTimeout(() => {
+                        map.invalidateSize();
+                        setIsMapReady(true);
+                    }, 100);
+                }
+            } catch (e) {
+                console.error("Map load failed", e);
+            }
+        };
+
+        initMap();
+
+        return () => {
+            if (mapRef.current) {
+                mapRef.current.remove();
+                mapRef.current = null;
+                setIsMapReady(false);
+            }
+        };
     }, []);
 
     // Handle Heatmap Layer updates
@@ -228,11 +268,16 @@ const StudentDensityMap: React.FC = () => {
         // Safety check: Canvas drawing fails if container is 0x0
         if (mapContainerRef.current) {
              const { clientWidth, clientHeight } = mapContainerRef.current;
-             if (clientWidth === 0 || clientHeight === 0) return;
+             if (clientWidth <= 0 || clientHeight <= 0) return;
         }
+
+        // Extra safety check for Leaflet internal size to prevent "IndexSizeError"
+        const size = mapRef.current.getSize();
+        if (size.x <= 0 || size.y <= 0) return;
 
         // Generate Heat Points
         const points: any[] = [];
+        const latLngs: any[] = [];
         
         const targetStudents = viewType === 'all' 
             ? students 
@@ -244,6 +289,7 @@ const StudentDensityMap: React.FC = () => {
                  // Intensity: 0.5 default, higher if pending to highlight demand
                  const intensity = viewType === 'pending' ? 0.9 : 0.6;
                  points.push([s.lat, s.lng, intensity]);
+                 latLngs.push([s.lat, s.lng]);
                  return;
             }
 
@@ -257,7 +303,10 @@ const StudentDensityMap: React.FC = () => {
                 const jitterLng = (Math.random() - 0.5) * 0.015;
                 
                 const intensity = viewType === 'pending' ? 0.8 : 0.5;
-                points.push([school.lat + jitterLat, school.lng + jitterLng, intensity]);
+                const lat = school.lat + jitterLat;
+                const lng = school.lng + jitterLng;
+                points.push([lat, lng, intensity]);
+                latLngs.push([lat, lng]);
             }
         });
 
@@ -278,6 +327,14 @@ const StudentDensityMap: React.FC = () => {
                         ? {0.4: 'blue', 0.65: 'lime', 1: 'red'}
                         : {0.4: 'yellow', 0.65: 'orange', 1: 'red'}
                 }).addTo(mapRef.current);
+                
+                // Fit bounds ONLY on initial load to set the right zoom
+                // We do NOT fit bounds on viewType change to avoid jarring jumps when comparing views
+                if (!hasFitBoundsRef.current && latLngs.length > 0) {
+                    const bounds = L.latLngBounds(latLngs);
+                    mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+                    hasFitBoundsRef.current = true;
+                }
             } catch (error) {
                 console.error("Error drawing heatmap:", error);
             }

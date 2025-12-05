@@ -60,7 +60,14 @@ export const DataProvider = ({ children }: { children?: ReactNode }) => {
   }, [lastBackupDate]);
 
   const addSchool = (school: School) => {
-    setSchools(prev => [...prev, school]);
+    setSchools(prev => {
+        // Prevent duplicate IDs manually just in case
+        const exists = prev.some(s => s.id === school.id);
+        if (exists) {
+            return prev.map(s => s.id === school.id ? school : s);
+        }
+        return [...prev, school];
+    });
   };
 
   const addStudent = (student: RegistryStudent) => {
@@ -69,9 +76,16 @@ export const DataProvider = ({ children }: { children?: ReactNode }) => {
 
   const updateSchools = (newSchools: School[]) => {
     setSchools(prev => {
-      const existingIds = new Set(prev.map(s => s.id));
-      const uniqueNewSchools = newSchools.filter(s => !existingIds.has(s.id));
-      return [...prev, ...uniqueNewSchools];
+      // Create a map of existing schools for efficient updates
+      const schoolMap = new Map(prev.map(s => [s.id, s]));
+      
+      // Update existing or Add new
+      newSchools.forEach(s => {
+        // If ID matches, overwrite. If not, add.
+        schoolMap.set(s.id, s);
+      });
+
+      return Array.from(schoolMap.values());
     });
   };
 
