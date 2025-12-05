@@ -1,12 +1,42 @@
-
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useData } from '../contexts/DataContext';
-import { MapPin, Star, Users, Search, Map as MapIcon, List, X, Calendar, Hash, School as SchoolIcon, Layout, ArrowUpDown, PieChart, Baby, BookOpen, GraduationCap, Library, AlertCircle, Loader2, CreditCard } from 'lucide-react';
+import { MapPin, Star, Users, Search, Map as MapIcon, List, X, Calendar, Hash, School as SchoolIcon, Layout, ArrowUpDown, PieChart, Baby, BookOpen, GraduationCap, Library, AlertCircle, Loader2, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
 import { SchoolType, School, RegistryStudent } from '../types';
 import { loadLeaflet } from '../services/leafletLoader';
 
 // Declare Leaflet globally
 declare const L: any;
+
+// --- Constants & Helpers (Extracted for Performance) ---
+
+// Mock "User Location" (City Center) for distance calculation
+const USER_LOCATION = { lat: -12.5253, lng: -40.2917 };
+
+// Haversine formula to calculate distance in km
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+  const R = 6371; 
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+    Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+  const d = R * c; 
+  return d;
+};
+
+// Helper to determine icon based on school type
+const getSchoolTypeIcon = (types: SchoolType[]) => {
+    // Prioritize highest level or most specific
+    if (types.includes(SchoolType.MEDIO)) return { icon: <GraduationCap className="h-5 w-5" />, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Ensino Médio' };
+    if (types.includes(SchoolType.FUNDAMENTAL_2)) return { icon: <BookOpen className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Fundamental II' };
+    if (types.includes(SchoolType.FUNDAMENTAL_1)) return { icon: <BookOpen className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Fundamental I' };
+    if (types.includes(SchoolType.INFANTIL)) return { icon: <Baby className="h-5 w-5" />, color: 'text-pink-600', bg: 'bg-pink-50', label: 'Infantil/Creche' };
+    if (types.includes(SchoolType.EJA)) return { icon: <Library className="h-5 w-5" />, color: 'text-orange-600', bg: 'bg-orange-50', label: 'EJA' };
+    
+    return { icon: <SchoolIcon className="h-5 w-5" />, color: 'text-slate-600', bg: 'bg-slate-50', label: 'Escola' };
+};
 
 // --- Subcomponent: SchoolMap ---
 // Isolates Leaflet logic so it only initializes when mounted
@@ -193,35 +223,9 @@ export const SchoolList: React.FC = () => {
   const [studentSearchCpf, setStudentSearchCpf] = useState(''); // Specific CPF filter
   const [modalStatusFilter, setModalStatusFilter] = useState<string>('Todos');
   const [modalClassFilter, setModalClassFilter] = useState<string>('Todas');
-
-  // Mock "User Location" (City Center) for distance calculation
-  const userLocation = { lat: -12.5253, lng: -40.2917 };
-
-  // Haversine formula to calculate distance in km
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; 
-    const dLat = (lat2 - lat1) * (Math.PI / 180);
-    const dLon = (lon2 - lon1) * (Math.PI / 180);
-    const a = 
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
-      Math.sin(dLon / 2) * Math.sin(dLon / 2); 
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
-    const d = R * c; 
-    return d;
-  };
-
-  // Helper to determine icon based on school type
-  const getSchoolTypeIcon = (types: SchoolType[]) => {
-      // Prioritize highest level or most specific
-      if (types.includes(SchoolType.MEDIO)) return { icon: <GraduationCap className="h-5 w-5" />, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Ensino Médio' };
-      if (types.includes(SchoolType.FUNDAMENTAL_2)) return { icon: <BookOpen className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Fundamental II' };
-      if (types.includes(SchoolType.FUNDAMENTAL_1)) return { icon: <BookOpen className="h-5 w-5" />, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Fundamental I' };
-      if (types.includes(SchoolType.INFANTIL)) return { icon: <Baby className="h-5 w-5" />, color: 'text-pink-600', bg: 'bg-pink-50', label: 'Infantil/Creche' };
-      if (types.includes(SchoolType.EJA)) return { icon: <Library className="h-5 w-5" />, color: 'text-orange-600', bg: 'bg-orange-50', label: 'EJA' };
-      
-      return { icon: <SchoolIcon className="h-5 w-5" />, color: 'text-slate-600', bg: 'bg-slate-50', label: 'Escola' };
-  };
+  
+  // Expanded classes in Modal
+  const [expandedModalClasses, setExpandedModalClasses] = useState<Set<string>>(new Set());
 
   // Process schools: Filter -> Calculate Distance -> Sort
   const processedSchools = useMemo(() => {
@@ -236,7 +240,7 @@ export const SchoolList: React.FC = () => {
     // 2. Add Distance
     result = result.map(school => ({
       ...school,
-      distance: calculateDistance(userLocation.lat, userLocation.lng, school.lat, school.lng)
+      distance: calculateDistance(USER_LOCATION.lat, USER_LOCATION.lng, school.lat, school.lng)
     }));
 
     // 3. Sort
@@ -328,7 +332,20 @@ export const SchoolList: React.FC = () => {
     setModalActiveTab('students');
     setStudentSearchTerm('');
     setStudentSearchCpf('');
+    setExpandedModalClasses(new Set()); // Reset expansions
   }, []);
+
+  const toggleModalClassExpansion = (className: string) => {
+      setExpandedModalClasses(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(className)) {
+              newSet.delete(className);
+          } else {
+              newSet.add(className);
+          }
+          return newSet;
+      });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 md:py-12 relative">
@@ -406,7 +423,7 @@ export const SchoolList: React.FC = () => {
         {viewMode === 'map' ? (
             <SchoolMap 
                 schools={processedSchools} 
-                center={userLocation} 
+                center={USER_LOCATION} 
                 onSelectSchool={handleSchoolSelect} 
             />
         ) : (
@@ -427,6 +444,7 @@ export const SchoolList: React.FC = () => {
               const colors = {
                   success: { 
                       border: 'border-green-200 hover:border-green-400 ring-green-50', 
+                      leftBorder: 'border-l-green-500',
                       badge: 'bg-green-500 text-white', 
                       text: 'text-green-700', 
                       bg: 'bg-green-50', 
@@ -434,6 +452,7 @@ export const SchoolList: React.FC = () => {
                   },
                   warning: { 
                       border: 'border-yellow-200 hover:border-yellow-400 ring-yellow-50', 
+                      leftBorder: 'border-l-yellow-500',
                       badge: 'bg-yellow-500 text-white', 
                       text: 'text-yellow-700', 
                       bg: 'bg-yellow-50', 
@@ -441,6 +460,7 @@ export const SchoolList: React.FC = () => {
                   },
                   danger: { 
                       border: 'border-red-200 hover:border-red-400 ring-red-50', 
+                      leftBorder: 'border-l-red-500',
                       badge: 'bg-red-500 text-white', 
                       text: 'text-red-700', 
                       bg: 'bg-red-50', 
@@ -448,6 +468,7 @@ export const SchoolList: React.FC = () => {
                   },
                   neutral: { 
                       border: 'border-slate-200 hover:border-slate-300 ring-slate-50', 
+                      leftBorder: 'border-l-slate-400',
                       badge: 'bg-slate-500 text-white', 
                       text: 'text-slate-600', 
                       bg: 'bg-slate-50', 
@@ -466,7 +487,7 @@ export const SchoolList: React.FC = () => {
               const typeIconInfo = getSchoolTypeIcon(school.types);
 
               return (
-                <div key={school.id} className={`bg-white rounded-xl shadow-sm border ${currentColors.border} overflow-hidden hover:shadow-xl hover:-translate-y-1 transition duration-300 group flex flex-col h-full ring-1 ring-inset ring-transparent hover:ring-opacity-50`}>
+                <div key={school.id} className={`bg-white rounded-xl shadow-sm border-y border-r border-l-4 ${currentColors.leftBorder} ${currentColors.border} overflow-hidden hover:shadow-xl hover:-translate-y-1 transition duration-300 group flex flex-col h-full ring-1 ring-inset ring-transparent hover:ring-opacity-50`}>
                   <div className="relative h-40 overflow-hidden">
                     <img 
                       src={school.image} 
@@ -760,9 +781,11 @@ export const SchoolList: React.FC = () => {
                                     {sortedClassEntries.map(([className, classStudents]: [string, RegistryStudent[]]) => {
                                         const count = classStudents.length;
                                         const percentage = maxClassSize > 0 ? (count / maxClassSize) * 100 : 0;
+                                        const isExpanded = expandedModalClasses.has(className);
+                                        const visibleStudents = isExpanded ? classStudents : classStudents.slice(0, 5);
                                         
                                         return (
-                                            <div key={className} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition">
+                                            <div key={className} className={`bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition duration-300 flex flex-col ${isExpanded ? 'row-span-2' : ''}`}>
                                                 <div className="flex justify-between items-center mb-2">
                                                     <div className="flex items-center gap-2">
                                                         <Layout className="h-5 w-5 text-blue-600" />
@@ -783,16 +806,24 @@ export const SchoolList: React.FC = () => {
                                                     </div>
                                                 </div>
 
-                                                <div className="border-t border-slate-50 pt-3 space-y-2 max-h-40 overflow-y-auto pr-2">
-                                                    {classStudents.slice(0, 5).map(s => (
+                                                <div className="border-t border-slate-50 pt-3 space-y-2 flex-1">
+                                                    {visibleStudents.map(s => (
                                                         <div key={s.id} className="text-xs text-slate-600 py-1 border-b border-slate-50 last:border-0 flex justify-between">
                                                             <span>{s.name}</span>
                                                         </div>
                                                     ))}
+                                                    
                                                     {classStudents.length > 5 && (
-                                                        <div className="text-xs text-center text-blue-500 font-medium pt-1">
-                                                            + {classStudents.length - 5} outros alunos
-                                                        </div>
+                                                        <button 
+                                                            onClick={() => toggleModalClassExpansion(className)}
+                                                            className="w-full mt-2 text-xs text-center text-blue-600 font-medium hover:bg-blue-50 py-1.5 rounded transition flex items-center justify-center gap-1"
+                                                        >
+                                                            {isExpanded ? (
+                                                                <>Ver menos <ChevronUp className="h-3 w-3" /></>
+                                                            ) : (
+                                                                <>+ {classStudents.length - 5} outros alunos <ChevronDown className="h-3 w-3" /></>
+                                                            )}
+                                                        </button>
                                                     )}
                                                 </div>
                                             </div>
